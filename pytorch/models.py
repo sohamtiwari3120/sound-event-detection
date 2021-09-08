@@ -20,12 +20,12 @@ from models_2020.transformer.encoder import Encoder as TransformerEncoder
 def init_layer(layer):
     """Initialize a Linear or Convolutional layer. """
     nn.init.xavier_uniform_(layer.weight)
- 
+
     if hasattr(layer, 'bias'):
         if layer.bias is not None:
             layer.bias.data.fill_(0.)
-            
-    
+
+
 def init_bn(bn):
     """Initialize a Batchnorm layer. """
     bn.bias.data.fill_(0.)
@@ -34,18 +34,18 @@ def init_bn(bn):
 
 def init_gru(rnn):
     """Initialize a GRU layer. """
-    
+
     def _concat_init(tensor, init_funcs):
         (length, fan_out) = tensor.shape
         fan_in = length // len(init_funcs)
-    
+
         for (i, init_func) in enumerate(init_funcs):
             init_func(tensor[i * fan_in : (i + 1) * fan_in, :])
-        
+
     def _inner_uniform(tensor):
         fan_in = nn.init._calculate_correct_fan(tensor, 'fan_in')
         nn.init.uniform_(tensor, -math.sqrt(3 / fan_in), math.sqrt(3 / fan_in))
-    
+
     for i in range(rnn.num_layers):
         _concat_init(
             getattr(rnn, 'weight_ih_l{}'.format(i)),
@@ -79,9 +79,9 @@ def pad_framewise_output(framewise_output: torch.Tensor, frames_num: int):
 
 
 def interpolate(x, ratio):
-    '''Interpolate the prediction to have the same time_steps as the target. 
-    The time_steps mismatch is caused by maxpooling in CNN. 
-    
+    '''Interpolate the prediction to have the same time_steps as the target.
+    The time_steps mismatch is caused by maxpooling in CNN.
+
     Args:
       x: (batch_size, time_steps, classes_num)
       ratio: int, ratio to upsample
@@ -94,33 +94,33 @@ def interpolate(x, ratio):
 
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
-        
+
         super(ConvBlock, self).__init__()
-        
-        self.conv1 = nn.Conv2d(in_channels=in_channels, 
+
+        self.conv1 = nn.Conv2d(in_channels=in_channels,
                               out_channels=out_channels,
                               kernel_size=(3, 3), stride=(1, 1),
                               padding=(1, 1), bias=False)
-                              
-        self.conv2 = nn.Conv2d(in_channels=out_channels, 
+
+        self.conv2 = nn.Conv2d(in_channels=out_channels,
                               out_channels=out_channels,
                               kernel_size=(3, 3), stride=(1, 1),
                               padding=(1, 1), bias=False)
-                              
+
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.bn2 = nn.BatchNorm2d(out_channels)
 
         self.init_weight()
-        
+
     def init_weight(self):
         init_layer(self.conv1)
         init_layer(self.conv2)
         init_bn(self.bn1)
         init_bn(self.bn2)
 
-        
+
     def forward(self, input, pool_size=(2, 2), pool_type='avg'):
-        
+
         x = input
         x = F.relu_(self.bn1(self.conv1(x)))
         x = F.relu_(self.bn2(self.conv2(x)))
@@ -134,27 +134,27 @@ class ConvBlock(nn.Module):
             x = x1 + x2
         else:
             raise Exception('Incorrect argument!')
-        
+
         return x
 
 
 class AttBlock(nn.Module):
     def __init__(self, n_in, n_out, activation='linear', temperature=1.):
         super(AttBlock, self).__init__()
-        
+
         self.activation = activation
         self.temperature = temperature
         self.att = nn.Conv1d(in_channels=n_in, out_channels=n_out, kernel_size=1, stride=1, padding=0, bias=True)
         self.cla = nn.Conv1d(in_channels=n_in, out_channels=n_out, kernel_size=1, stride=1, padding=0, bias=True)
-        
+
         self.bn_att = nn.BatchNorm1d(n_out)
         self.init_weights()
-        
+
     def init_weights(self):
         init_layer(self.att)
         init_layer(self.cla)
         init_bn(self.bn_att)
-        
+
     def forward(self, x):
         # x: (n_samples, n_in, n_time)
         tmp = self.att(x)
@@ -174,21 +174,21 @@ class AttBlock(nn.Module):
 class RegBlock(nn.Module):
     def __init__(self, n_in, n_out, activation='linear', temperature=1.):
         super(AttBlock, self).__init__()
-        
+
         self.activation = activation
         self.temperature = temperature
         self.reg = nn.Linear(n_in, num_classes, bias=True)
         self.att = nn.Conv1d(in_channels=n_in, out_channels=n_out, kernel_size=1, stride=1, padding=0, bias=True)
         self.cla = nn.Conv1d(in_channels=n_in, out_channels=n_out, kernel_size=1, stride=1, padding=0, bias=True)
-        
+
         self.bn_att = nn.BatchNorm1d(n_out)
         self.init_weights()
-        
+
     def init_weights(self):
         init_layer(self.att)
         init_layer(self.cla)
         init_bn(self.bn_att)
-        
+
     def forward(self, x):
         # x: (n_samples, n_in, n_time)
         tmp = self.att(x)
@@ -206,9 +206,9 @@ class RegBlock(nn.Module):
             return torch.sigmoid(x)
 
 class Cnn_9layers_FrameMax(nn.Module):
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
         fmax, classes_num):
-        
+
         super(Cnn_9layers_FrameMax, self).__init__()
 
         window = 'hann'
@@ -219,17 +219,17 @@ class Cnn_9layers_FrameMax(nn.Module):
         top_db = None
 
         # Spectrogram extractor
-        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size, 
-            win_length=window_size, window=window, center=center, pad_mode=pad_mode, 
+        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size,
+            win_length=window_size, window=window, center=center, pad_mode=pad_mode,
             freeze_parameters=True)
 
         # Logmel feature extractor
-        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size, 
-            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db, 
+        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size,
+            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db,
             freeze_parameters=True)
 
         # Spec augmenter
-        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2, 
+        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2,
             freq_drop_width=8, freq_stripes_num=2)
 
         self.bn0 = nn.BatchNorm2d(64)
@@ -249,23 +249,23 @@ class Cnn_9layers_FrameMax(nn.Module):
 
     def forward(self, input, mixup_lambda=None):
         """Input: (batch_size, times_steps, freq_bins)"""
-        
+
         interpolate_ratio = 8
 
         x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
         x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
-        
+
         x = x.transpose(1, 3)
         x = self.bn0(x)
         x = x.transpose(1, 3)
-        
+
         if self.training:
             x = self.spec_augmenter(x)
 
         # Mixup on spectrogram
         if self.training and mixup_lambda is not None:
             x = do_mixup(x, mixup_lambda)
-        
+
         x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
@@ -278,22 +278,22 @@ class Cnn_9layers_FrameMax(nn.Module):
         x = x.transpose(1, 2)
         framewise_output = torch.sigmoid(self.fc(x))
         framewise_output = interpolate(framewise_output, interpolate_ratio)
-        
+
         # Clipwise output
         (clipwise_output, _) = torch.max(framewise_output, dim=1)
-        
+
         output_dict = {
-            'framewise_output': framewise_output, 
-            'clipwise_output': clipwise_output, 
+            'framewise_output': framewise_output,
+            'clipwise_output': clipwise_output,
             'embedding': embedding}
-            
+
         return output_dict
 
 
 class Cnn_9layers_FrameAvg(nn.Module):
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
         fmax, classes_num):
-        
+
         super(Cnn_9layers_FrameAvg, self).__init__()
 
         window = 'hann'
@@ -304,17 +304,17 @@ class Cnn_9layers_FrameAvg(nn.Module):
         top_db = None
 
         # Spectrogram extractor
-        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size, 
-            win_length=window_size, window=window, center=center, pad_mode=pad_mode, 
+        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size,
+            win_length=window_size, window=window, center=center, pad_mode=pad_mode,
             freeze_parameters=True)
 
         # Logmel feature extractor
-        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size, 
-            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db, 
+        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size,
+            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db,
             freeze_parameters=True)
 
         # Spec augmenter
-        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2, 
+        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2,
             freq_drop_width=8, freq_stripes_num=2)
 
         self.bn0 = nn.BatchNorm2d(64)
@@ -334,23 +334,23 @@ class Cnn_9layers_FrameAvg(nn.Module):
 
     def forward(self, input, mixup_lambda=None):
         """Input: (batch_size, times_steps, freq_bins)"""
-        
+
         interpolate_ratio = 8
 
         x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
         x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
-        
+
         x = x.transpose(1, 3)
         x = self.bn0(x)
         x = x.transpose(1, 3)
-        
+
         if self.training:
             x = self.spec_augmenter(x)
 
         # Mixup on spectrogram
         if self.training and mixup_lambda is not None:
             x = do_mixup(x, mixup_lambda)
-        
+
         x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
@@ -363,22 +363,22 @@ class Cnn_9layers_FrameAvg(nn.Module):
         x = x.transpose(1, 2)
         framewise_output = torch.sigmoid(self.fc(x))
         framewise_output = interpolate(framewise_output, interpolate_ratio)
-        
+
         # Clipwise output
         clipwise_output = torch.mean(framewise_output, dim=1)
-        
+
         output_dict = {
-            'framewise_output': framewise_output, 
-            'clipwise_output': clipwise_output, 
+            'framewise_output': framewise_output,
+            'clipwise_output': clipwise_output,
             'embedding': embedding}
-            
+
         return output_dict
 
 
 class Cnn_9layers_FrameAtt(nn.Module):
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
         fmax, classes_num):
-        
+
         super(Cnn_9layers_FrameAtt, self).__init__()
 
         window = 'hann'
@@ -389,17 +389,17 @@ class Cnn_9layers_FrameAtt(nn.Module):
         top_db = None
 
         # Spectrogram extractor
-        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size, 
-            win_length=window_size, window=window, center=center, pad_mode=pad_mode, 
+        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size,
+            win_length=window_size, window=window, center=center, pad_mode=pad_mode,
             freeze_parameters=True)
 
         # Logmel feature extractor
-        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size, 
-            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db, 
+        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size,
+            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db,
             freeze_parameters=True)
 
         # Spec augmenter
-        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2, 
+        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2,
             freq_drop_width=8, freq_stripes_num=2)
 
         self.bn0 = nn.BatchNorm2d(64)
@@ -417,23 +417,23 @@ class Cnn_9layers_FrameAtt(nn.Module):
 
     def forward(self, input, mixup_lambda=None):
         """Input: (batch_size, times_steps, freq_bins)"""
-        
+
         interpolate_ratio = 8
 
         x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
         x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
-        
+
         x = x.transpose(1, 3)
         x = self.bn0(x)
         x = x.transpose(1, 3)
-        
+
         if self.training:
             x = self.spec_augmenter(x)
 
         # Mixup on spectrogram
         if self.training and mixup_lambda is not None:
             x = do_mixup(x, mixup_lambda)
-        
+
         x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
@@ -447,19 +447,19 @@ class Cnn_9layers_FrameAtt(nn.Module):
         # Framewise output
         framewise_output = cla.transpose(1, 2)
         framewise_output = interpolate(framewise_output, interpolate_ratio)
-        
+
         output_dict = {
-            'framewise_output': framewise_output, 
-            'clipwise_output': clipwise_output, 
+            'framewise_output': framewise_output,
+            'clipwise_output': clipwise_output,
             'embedding': cla}
-            
+
         return output_dict
 
 
 class Cnn_9layers_Gru_FrameAvg(nn.Module):
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
         fmax, classes_num):
-        
+
         super(Cnn_9layers_Gru_FrameAvg, self).__init__()
 
         window = 'hann'
@@ -470,17 +470,17 @@ class Cnn_9layers_Gru_FrameAvg(nn.Module):
         top_db = None
 
         # Spectrogram extractor
-        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size, 
-            win_length=window_size, window=window, center=center, pad_mode=pad_mode, 
+        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size,
+            win_length=window_size, window=window, center=center, pad_mode=pad_mode,
             freeze_parameters=True)
 
         # Logmel feature extractor
-        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size, 
-            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db, 
+        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size,
+            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db,
             freeze_parameters=True)
 
         # Spec augmenter
-        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2, 
+        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2,
             freq_drop_width=8, freq_stripes_num=2)
 
         self.bn0 = nn.BatchNorm2d(64)
@@ -490,7 +490,7 @@ class Cnn_9layers_Gru_FrameAvg(nn.Module):
         self.conv_block3 = ConvBlock(in_channels=128, out_channels=256)
         self.conv_block4 = ConvBlock(in_channels=256, out_channels=512)
 
-        self.gru = nn.GRU(input_size=512, hidden_size=256, num_layers=1, 
+        self.gru = nn.GRU(input_size=512, hidden_size=256, num_layers=1,
             bias=True, batch_first=True, bidirectional=True)
 
         self.fc = nn.Linear(512, classes_num, bias=True)
@@ -504,23 +504,23 @@ class Cnn_9layers_Gru_FrameAvg(nn.Module):
 
     def forward(self, input, mixup_lambda=None):
         """Input: (batch_size, times_steps, freq_bins)"""
-        
+
         interpolate_ratio = 8
 
         x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
         x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
-        
+
         x = x.transpose(1, 3)
         x = self.bn0(x)
         x = x.transpose(1, 3)
-        
+
         if self.training:
             x = self.spec_augmenter(x)
 
         # Mixup on spectrogram
         if self.training and mixup_lambda is not None:
             x = do_mixup(x, mixup_lambda)
-        
+
         x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
@@ -536,24 +536,24 @@ class Cnn_9layers_Gru_FrameAvg(nn.Module):
         x = x.transpose(1, 2)
         framewise_output = torch.sigmoid(self.fc(x))
         framewise_output = interpolate(framewise_output, interpolate_ratio)
-        
+
         # Clipwise output
         clipwise_output = torch.mean(framewise_output, dim=1)
-        
+
         output_dict = {
-            'framewise_output': framewise_output, 
-            'clipwise_output': clipwise_output, 
+            'framewise_output': framewise_output,
+            'clipwise_output': clipwise_output,
             'embedding': embedding}
-            
+
         return output_dict
 
 def roundup(x):
     return x if x % 100 == 0 else x + 100 - x % 100
 
 class Cnn_9layers_Gru_FrameAtt(nn.Module):
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
         fmax, classes_num, feature_type):
-        
+
         super(Cnn_9layers_Gru_FrameAtt, self).__init__()
 
         window = 'hann'
@@ -564,33 +564,35 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
         top_db = None
         num_bins = 80
         self.feature_type = feature_type
-        
+
         # Spectrogram extractor
-        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size, 
-            win_length=window_size, window=window, center=center, pad_mode=pad_mode, 
+        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size,
+            win_length=window_size, window=window, center=center, pad_mode=pad_mode,
             freeze_parameters=True)
 
         # Logmel feature extractor
-        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size, 
-            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db, 
+        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size,
+            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db,
             freeze_parameters=True)
-        
+
+        self.fbank_s3prl = torch.hub.load('s3prl/s3prl', 'fbank')
+
         # STFT extractor
 #        self.stft_extractor = STFT(n_fft=window_size, hop_length=hop_size, win_length=window_size,
 #               window=window, center=True, pad_mode=pad_mode, freeze_parameters=True)
-        
+
         # CQT feature extractor
 #        self.cqt_extractor = CQTFilterBank(sr=sample_rate, n_bins=num_bins,
 #            fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db,
 #            freeze_parameters=True)
-            
+
         # Gammatone feature extractor
 #        self.gamma_extractor = GammaFilterBank(sr=sample_rate, n_fft=window_size,
 #        n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db,
 #        freeze_parameters=True)
-        
+
         # Spec augmenter
-        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2, 
+        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2,
             freq_drop_width=8, freq_stripes_num=2)
 
         self.bn0 = nn.BatchNorm2d(64)
@@ -600,7 +602,7 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
         self.conv_block3 = ConvBlock(in_channels=128, out_channels=256)
         self.conv_block4 = ConvBlock(in_channels=256, out_channels=512)
 
-        self.gru = nn.GRU(input_size=512, hidden_size=256, num_layers=1, 
+        self.gru = nn.GRU(input_size=512, hidden_size=256, num_layers=1,
             bias=True, batch_first=True, bidirectional=True)
 
         self.att_block = AttBlock(n_in=512, n_out=25, activation='sigmoid')
@@ -611,37 +613,48 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
         init_bn(self.bn0)
         init_gru(self.gru)
 
-    def forward(self, input, mixup_lambda=None, timeshift=False):
+    def forward(self, x, mixup_lambda=None, timeshift=False):
         """Input: (batch_size, times_steps, freq_bins)"""
-        
+
         interpolate_ratio = 8
-        
+
+        print(f"#############################")
+        print(f"#### DEBUGGING STARTS #######")
+        print(f"\n{x.shape}")
+        print(x)
+        wavs = [wav for wav in x.squeeze(1)]
+        print(f"\n\n wavs {len(wavs)}")
+        print(wavs)
+        print(f"#### DEBUGGING ENDS #########")
+        print(f"#############################")
+
+
         if self.feature_type == 'logmel':
-            x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
+            x = self.spectrogram_extractor(x)   # (batch_size, 1, time_steps, freq_bins)
             x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
         elif self.feature_type == 'cqt':
-            x = self.stft_extractor(input)
+            x = self.stft_extractor(x)
             x = self.cqt_extractor(x)
         elif self.feature_type == 'gamma':
             #x = self.gamma_extractor(input)
             x = torch.unsqueeze(input, 1)
             x = x.transpose(2,3)
             x = x.to('cuda')
-        
+
         x = x.transpose(1, 3)
         x = self.bn0(x)
         x = x.transpose(1, 3)
-        
+
         if self.training:
             x = self.spec_augmenter(x)
-        
+
         # Mixup on spectrogram
         if self.training and mixup_lambda is not None and not timeshift:
             x = do_mixup(x, mixup_lambda)
-            
+
         if self.training and mixup_lambda is not None and timeshift:
             x = do_mixup_timeshift(x, mixup_lambda)
-            
+
         x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
@@ -661,12 +674,12 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
         if framewise_output.size()[1] != 1000:
             framewise_output = pad_framewise_output(framewise_output, roundup(framewise_output.size()[1]))
         #framewise_output = pad_framewise_output(framewise_output, 1000)
-        
+
         output_dict = {
-            'framewise_output': framewise_output, 
-            'clipwise_output': clipwise_output, 
+            'framewise_output': framewise_output,
+            'clipwise_output': clipwise_output,
             'embedding': cla}
-            
+
         return output_dict
 
 
@@ -747,7 +760,7 @@ class MultiHead(nn.Module):
 
         # mask = mask.repeat(n_head, 1, 1) # (n*b) x .. x ..
         output, attn = self.attention(q, k, v, mask=mask)   # (n_head * batch_size, T, 64), (n_head * batch_size, T, T)
-        
+
         output = output.view(n_head, sz_b, len_q, d_v)  # (n_head, batch_size, T, 64)
         output = output.permute(1, 2, 0, 3).contiguous().view(sz_b, len_q, -1) # b x lq x (n*dv), (batch_size, T, 512)
         output = F.relu_(self.dropout(self.fc(output)))
@@ -755,9 +768,9 @@ class MultiHead(nn.Module):
 
 
 class Cnn_9layers_Transformer_FrameAvg(nn.Module):
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
         fmax, classes_num):
-        
+
         super(Cnn_9layers_Transformer_FrameAvg, self).__init__()
 
         window = 'hann'
@@ -768,17 +781,17 @@ class Cnn_9layers_Transformer_FrameAvg(nn.Module):
         top_db = None
 
         # Spectrogram extractor
-        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size, 
-            win_length=window_size, window=window, center=center, pad_mode=pad_mode, 
+        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size,
+            win_length=window_size, window=window, center=center, pad_mode=pad_mode,
             freeze_parameters=True)
 
         # Logmel feature extractor
-        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size, 
-            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db, 
+        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size,
+            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db,
             freeze_parameters=True)
 
         # Spec augmenter
-        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2, 
+        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2,
             freq_drop_width=8, freq_stripes_num=2)
 
         self.bn0 = nn.BatchNorm2d(64)
@@ -805,16 +818,16 @@ class Cnn_9layers_Transformer_FrameAvg(nn.Module):
 
     def forward(self, input, mixup_lambda=None, timeshift=False):
         """Input: (batch_size, times_steps, freq_bins)"""
-        
+
         interpolate_ratio = 8
 
         x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
         x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
-        
+
         x = x.transpose(1, 3)
         x = self.bn0(x)
         x = x.transpose(1, 3)
-        
+
         if self.training:
             x = self.spec_augmenter(x)
 
@@ -822,10 +835,10 @@ class Cnn_9layers_Transformer_FrameAvg(nn.Module):
         # Mixup on spectrogram
         if self.training and mixup_lambda is not None and not timeshift:
             x = do_mixup(x, mixup_lambda)
-            
+
         if self.training and mixup_lambda is not None and timeshift:
             x = do_mixup_timeshift(x, mixup_lambda)
-        
+
         x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
@@ -841,22 +854,22 @@ class Cnn_9layers_Transformer_FrameAvg(nn.Module):
         x = x.transpose(1, 2)
         framewise_output = torch.sigmoid(self.fc(x))
         framewise_output = interpolate(framewise_output, interpolate_ratio)
-        
+
         # Clipwise output
         clipwise_output = torch.mean(framewise_output, dim=1)
-        
+
         output_dict = {
-            'framewise_output': framewise_output, 
-            'clipwise_output': clipwise_output, 
+            'framewise_output': framewise_output,
+            'clipwise_output': clipwise_output,
             'embedding': embedding}
-            
+
         return output_dict
 
 
 class Cnn_9layers_Transformer_FrameAtt(nn.Module):
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
         fmax, classes_num):
-        
+
         super(Cnn_9layers_Transformer_FrameAtt, self).__init__()
 
         window = 'hann'
@@ -867,17 +880,17 @@ class Cnn_9layers_Transformer_FrameAtt(nn.Module):
         top_db = None
 
         # Spectrogram extractor
-        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size, 
-            win_length=window_size, window=window, center=center, pad_mode=pad_mode, 
+        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size,
+            win_length=window_size, window=window, center=center, pad_mode=pad_mode,
             freeze_parameters=True)
 
         # Logmel feature extractor
-        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size, 
-            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db, 
+        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size,
+            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db,
             freeze_parameters=True)
 
         # Spec augmenter
-        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2, 
+        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2,
             freq_drop_width=8, freq_stripes_num=2)
 
         self.bn0 = nn.BatchNorm2d(64)
@@ -903,26 +916,26 @@ class Cnn_9layers_Transformer_FrameAtt(nn.Module):
 
     def forward(self, input, mixup_lambda=None, timeshift=False):
         """Input: (batch_size, times_steps, freq_bins)"""
-        
+
         interpolate_ratio = 8
 
         x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
         x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
-        
+
         x = x.transpose(1, 3)
         x = self.bn0(x)
         x = x.transpose(1, 3)
-        
+
         if self.training:
             x = self.spec_augmenter(x)
 
         # Mixup on spectrogram
         if self.training and mixup_lambda is not None and not timeshift:
             x = do_mixup(x, mixup_lambda)
-            
+
         if self.training and mixup_lambda is not None and timeshift:
             x = do_mixup_timeshift(x, mixup_lambda)
-        
+
         x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
@@ -940,18 +953,18 @@ class Cnn_9layers_Transformer_FrameAtt(nn.Module):
         # Framewise output
         framewise_output = cla.transpose(1, 2)
         framewise_output = interpolate(framewise_output, interpolate_ratio)
-        
+
         output_dict = {
-            'framewise_output': framewise_output, 
-            'clipwise_output': clipwise_output, 
+            'framewise_output': framewise_output,
+            'clipwise_output': clipwise_output,
             'embedding': embedding}
-            
+
         return output_dict
 
 class Cnn14_DecisionLevelAtt(nn.Module):
    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
        fmax, classes_num):
-       
+
        super(Cnn14_DecisionLevelAtt, self).__init__()
 
        window = 'hann'
@@ -987,7 +1000,7 @@ class Cnn14_DecisionLevelAtt(nn.Module):
 
        self.fc1 = nn.Linear(2048, 2048, bias=True)
        self.att_block = AttBlock(2048, classes_num, activation='sigmoid')
-       
+
        self.init_weight()
 
    def init_weight(self):
@@ -1002,18 +1015,18 @@ class Cnn14_DecisionLevelAtt(nn.Module):
        x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
 
        frames_num = x.shape[2]-1
-       
+
        x = x.transpose(1, 3)
        x = self.bn0(x)
        x = x.transpose(1, 3)
-       
+
        if self.training:
            x = self.spec_augmenter(x)
 
        # Mixup on spectrogram
        if self.training and mixup_lambda is not None:
            x = do_mixup(x, mixup_lambda)
-       
+
        x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
        x = F.dropout(x, p=0.2, training=self.training)
        x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
@@ -1027,7 +1040,7 @@ class Cnn14_DecisionLevelAtt(nn.Module):
        x = self.conv_block6(x, pool_size=(1, 1), pool_type='avg')
        x = F.dropout(x, p=0.2, training=self.training)
        x = torch.mean(x, dim=3)
-       
+
        x1 = F.max_pool1d(x, kernel_size=3, stride=1, padding=1)
        x2 = F.avg_pool1d(x, kernel_size=3, stride=1, padding=1)
        x = x1 + x2
@@ -1038,7 +1051,7 @@ class Cnn14_DecisionLevelAtt(nn.Module):
        x = F.dropout(x, p=0.5, training=self.training)
        (clipwise_output, _, segmentwise_output) = self.att_block(x)
        segmentwise_output = segmentwise_output.transpose(1, 2)
-       
+
        # Get framewise output
        framewise_output = interpolate(segmentwise_output, interpolate_ratio)
        framewise_output = pad_framewise_output(framewise_output, frames_num)
@@ -1060,7 +1073,7 @@ class Cnn_7layers_Conformer(torch.nn.Module):
         layer_init="pytorch",
     ):
         super(Cnn_7layers_Conformer, self).__init__()
-        
+
         window = 'hann'
         center = True
         pad_mode = 'reflect'
@@ -1068,7 +1081,7 @@ class Cnn_7layers_Conformer(torch.nn.Module):
         amin = 1e-10
         top_db = None
         #self.interpolate_ratio = 32  # Downsampled ratio
-        
+
         self.cnn_kwargs = {
             'activation': "Relu",
             'conv_dropout': 0.1,
@@ -1077,7 +1090,7 @@ class Cnn_7layers_Conformer(torch.nn.Module):
             'stride': [1, 1, 1, 1, 1, 1, 1],
             'nb_filters': [16, 32, 64, 128, 128, 128, 128],
             'pooling': [[2, 2], [2, 2], [2, 2], [1, 2], [1, 2], [1, 2], [1, 1]]}
-            
+
         # Spectrogram extractor
         self.spectrogram_extractor = Spectrogram(
            n_fft=window_size,
@@ -1111,7 +1124,7 @@ class Cnn_7layers_Conformer(torch.nn.Module):
 
         self.cnn = CNN(n_in_channel=1, **self.cnn_kwargs)
         input_dim = self.cnn.nb_filters[-1]
-        
+
         self.pooling = pooling
 
         if encoder_type == "Transformer":
@@ -1151,7 +1164,7 @@ class Cnn_7layers_Conformer(torch.nn.Module):
             self.linear_emb = torch.nn.Linear(1, input_dim)
 
         self.reset_parameters(layer_init)
-       
+
     def preprocess(self, input, mixup_lambda=None, timeshift=False):
         # t1 = time.time()
         x = self.spectrogram_extractor(input)  # (batch_size, 1, time_steps, freq_bins)
@@ -1165,20 +1178,20 @@ class Cnn_7layers_Conformer(torch.nn.Module):
 
 #        if self.training:
 #            x = self.spec_augmenter(x)
-       
+
         # Mixup on spectrogram
         if self.training and mixup_lambda is not None and not timeshift:
             x = do_mixup(x, mixup_lambda)
-            
+
         if self.training and mixup_lambda is not None and timeshift:
             x = do_mixup_timeshift(x, mixup_lambda)
         return x, frames_num
-    
+
     def forward(self, x, mixup_lambda=None, timeshift=False, mask=None):
 
         # input
         #x = torch.reshape(x, (x.size()[0], x.size()[-1]))
-        
+
         x, frames_num = self.preprocess(x, mixup_lambda=mixup_lambda, timeshift=timeshift)
         x = self.cnn(x)
         x = x.squeeze(-1).permute(0, 2, 1)
@@ -1186,7 +1199,7 @@ class Cnn_7layers_Conformer(torch.nn.Module):
         if self.pooling == "token":
             tag_token = self.linear_emb(torch.ones(x.size(0), 1, 1).cuda())
             x = torch.cat([tag_token, x], dim=1)
-        
+
         x, _ = self.encoder(x, mask)
 
         if self.pooling == "attention":
@@ -1204,7 +1217,7 @@ class Cnn_7layers_Conformer(torch.nn.Module):
         elif self.pooling == "auto":
             strong = self.classifier(x)
             weak = self.autopool(strong)
-            
+
         interpolate_ratio = 8
         strong = interpolate(strong, interpolate_ratio)
         #strong = pad_framewise_output(strong, 1000)
@@ -1240,7 +1253,7 @@ class Cnn_7layers_Conformer(torch.nn.Module):
 class Cnn_14layers_Gru_FrameAtt(nn.Module):
     def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
         fmax, classes_num):
-        
+
         super(Cnn_14layers_Gru_FrameAtt, self).__init__()
 
         window = 'hann'
@@ -1265,7 +1278,7 @@ class Cnn_14layers_Gru_FrameAtt(nn.Module):
             freq_drop_width=8, freq_stripes_num=2)
 
         self.bn0 = nn.BatchNorm2d(64)
-        
+
         self.conv_block1 = ConvBlock(in_channels=1, out_channels=64)
         self.conv_block2 = ConvBlock(in_channels=64, out_channels=128)
         self.conv_block3 = ConvBlock(in_channels=128, out_channels=256)
@@ -1286,30 +1299,30 @@ class Cnn_14layers_Gru_FrameAtt(nn.Module):
 
     def forward(self, input, mixup_lambda=None):
         """Input: (batch_size, times_steps, freq_bins)"""
-        
+
         interpolate_ratio = 32
 
         x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
         x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
-        
+
         x = x.transpose(1, 3)
         x = self.bn0(x)
         x = x.transpose(1, 3)
-        
+
         if self.training:
             x = self.spec_augmenter(x)
 
         # Mixup on spectrogram
         if self.training and mixup_lambda is not None:
             x = do_mixup(x, mixup_lambda)
-        
+
         x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block4(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block5(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block6(x, pool_size=(1, 1), pool_type='avg')
-        
+
 
         x = torch.mean(x, dim=3)
         x = x.transpose(1, 2)   # (batch_size, time_steps, channels)
@@ -1323,18 +1336,18 @@ class Cnn_14layers_Gru_FrameAtt(nn.Module):
         framewise_output = cla.transpose(1, 2)
         framewise_output = interpolate(framewise_output, interpolate_ratio)
         framewise_output = pad_framewise_output(framewise_output, 1000)
-        
+
         output_dict = {
             'framewise_output': framewise_output,
             'clipwise_output': clipwise_output,
             'embedding': cla}
-            
+
         return output_dict
 
 class Cnn_14layers_Transformer_FrameAtt(nn.Module):
     def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
         fmax, classes_num):
-        
+
         super(Cnn_14layers_Transformer_FrameAtt, self).__init__()
 
         window = 'hann'
@@ -1383,30 +1396,30 @@ class Cnn_14layers_Transformer_FrameAtt(nn.Module):
 
     def forward(self, input, mixup_lambda=None):
         """Input: (batch_size, times_steps, freq_bins)"""
-        
+
         interpolate_ratio = 32
 
         x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
         x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
-        
+
         x = x.transpose(1, 3)
         x = self.bn0(x)
         x = x.transpose(1, 3)
-        
+
         if self.training:
             x = self.spec_augmenter(x)
 
         # Mixup on spectrogram
         if self.training and mixup_lambda is not None:
             x = do_mixup(x, mixup_lambda)
-        
+
         x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block4(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block5(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block6(x, pool_size=(1, 1), pool_type='avg')
-        
+
 
         x = torch.mean(x, dim=3)
         x = x.transpose(1, 2)   # (batch_size, time_steps, channels)
@@ -1421,12 +1434,12 @@ class Cnn_14layers_Transformer_FrameAtt(nn.Module):
         framewise_output = cla.transpose(1, 2)
         framewise_output = interpolate(framewise_output, interpolate_ratio)
         framewise_output = pad_framewise_output(framewise_output, 1000)
-        
+
         output_dict = {
             'framewise_output': framewise_output,
             'clipwise_output': clipwise_output,
             'embedding': embedding}
-            
+
         return output_dict
 
 class Cnn_9layers_Conformer(torch.nn.Module):
@@ -1441,7 +1454,7 @@ class Cnn_9layers_Conformer(torch.nn.Module):
         layer_init="pytorch",
     ):
         super(Cnn_9layers_Conformer, self).__init__()
-        
+
         window = 'hann'
         center = True
         pad_mode = 'reflect'
@@ -1449,7 +1462,7 @@ class Cnn_9layers_Conformer(torch.nn.Module):
         amin = 1e-10
         top_db = None
         #self.interpolate_ratio = 32  # Downsampled ratio
-        
+
         self.cnn_kwargs = {
             'activation': "Relu",
             'conv_dropout': 0.1,
@@ -1458,7 +1471,7 @@ class Cnn_9layers_Conformer(torch.nn.Module):
             'stride': [1, 1, 1, 1, 1, 1, 1],
             'nb_filters': [16, 32, 64, 128, 128, 128, 128],
             'pooling': [[2, 2], [2, 2], [2, 2], [1, 2], [1, 2], [1, 2], [1, 1]]}
-            
+
         # Spectrogram extractor
         self.spectrogram_extractor = Spectrogram(
            n_fft=window_size,
@@ -1489,14 +1502,14 @@ class Cnn_9layers_Conformer(torch.nn.Module):
            freq_stripes_num=2)
 
         self.bn0 = nn.BatchNorm2d(mel_bins)
-        
+
         self.conv_block1 = ConvBlock(in_channels=1, out_channels=64)
         self.conv_block2 = ConvBlock(in_channels=64, out_channels=128)
         self.conv_block3 = ConvBlock(in_channels=128, out_channels=256)
         self.conv_block4 = ConvBlock(in_channels=256, out_channels=512)
-        
+
         input_dim = 512
-        
+
         self.pooling = pooling
 
         if encoder_type == "Transformer":
@@ -1536,7 +1549,7 @@ class Cnn_9layers_Conformer(torch.nn.Module):
             self.linear_emb = torch.nn.Linear(1, input_dim)
 
         self.reset_parameters(layer_init)
-       
+
     def preprocess(self, input, mixup_lambda=None, timeshift=False):
         # t1 = time.time()
         x = self.spectrogram_extractor(input)  # (batch_size, 1, time_steps, freq_bins)
@@ -1550,20 +1563,20 @@ class Cnn_9layers_Conformer(torch.nn.Module):
 
         if self.training:
             x = self.spec_augmenter(x)
-       
+
         # Mixup on spectrogram
         if self.training and mixup_lambda is not None and not timeshift:
             x = do_mixup(x, mixup_lambda)
-            
+
         if self.training and mixup_lambda is not None and timeshift:
             x = do_mixup_timeshift(x, mixup_lambda)
         return x, frames_num
-    
+
     def forward(self, x, mixup_lambda=None, timeshift=False, mask=None):
 
         # input
         #x = torch.reshape(x, (x.size()[0], x.size()[-1]))
-        
+
         x, frames_num = self.preprocess(x, mixup_lambda=mixup_lambda, timeshift=timeshift)
         x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
@@ -1571,7 +1584,7 @@ class Cnn_9layers_Conformer(torch.nn.Module):
         x = self.conv_block4(x, pool_size=(1, 1), pool_type='avg')
         x = torch.reshape(x, (x.size()[0], x.size()[1], x.size()[2]*x.size()[3]))
         x = x.squeeze(-1).permute(0, 2, 1)
-        
+
         if self.pooling == "token":
             tag_token = self.linear_emb(torch.ones(x.size(0), 1, 1).cuda())
             x = torch.cat([tag_token, x], dim=1)
@@ -1593,7 +1606,7 @@ class Cnn_9layers_Conformer(torch.nn.Module):
         elif self.pooling == "auto":
             strong = self.classifier(x)
             weak = self.autopool(strong)
-            
+
         #interpolate_ratio = 8
         #strong = interpolate(strong, interpolate_ratio)
         #strong = pad_framewise_output(strong, 1000)
@@ -1630,7 +1643,7 @@ class Cnn_9layers_Conformer(torch.nn.Module):
 class Cnn_9layers_Gru_Reg(nn.Module):
     def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
         fmax, classes_num, feature_type):
-        
+
         super(Cnn_9layers_Gru_Reg, self).__init__()
 
         window = 'hann'
@@ -1641,7 +1654,7 @@ class Cnn_9layers_Gru_Reg(nn.Module):
         top_db = None
         num_bins = 80
         self.feature_type = feature_type
-        
+
         # Spectrogram extractor
         self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size,
             win_length=window_size, window=window, center=center, pad_mode=pad_mode,
@@ -1651,7 +1664,7 @@ class Cnn_9layers_Gru_Reg(nn.Module):
         self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size,
             n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db,
             freeze_parameters=True)
-        
+
         # Spec augmenter
         self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2,
             freq_drop_width=8, freq_stripes_num=2)
@@ -1676,9 +1689,9 @@ class Cnn_9layers_Gru_Reg(nn.Module):
 
     def forward(self, input, mixup_lambda=None, timeshift=False):
         """Input: (batch_size, times_steps, freq_bins)"""
-        
+
         interpolate_ratio = 8
-        
+
         if self.feature_type == 'logmel':
             x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
             x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
@@ -1690,21 +1703,21 @@ class Cnn_9layers_Gru_Reg(nn.Module):
             x = torch.unsqueeze(input, 1)
             x = x.transpose(2,3)
             x = x.to('cuda')
-        
+
         x = x.transpose(1, 3)
         x = self.bn0(x)
         x = x.transpose(1, 3)
-        
+
         if self.training:
             x = self.spec_augmenter(x)
-        
+
         # Mixup on spectrogram
         if self.training and mixup_lambda is not None and not timeshift:
             x = do_mixup(x, mixup_lambda)
-            
+
         if self.training and mixup_lambda is not None and timeshift:
             x = do_mixup_timeshift(x, mixup_lambda)
-            
+
         x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
@@ -1722,10 +1735,10 @@ class Cnn_9layers_Gru_Reg(nn.Module):
         framewise_output = cla.transpose(1, 2)
         framewise_output = interpolate(framewise_output, interpolate_ratio)
         #framewise_output = pad_framewise_output(framewise_output, 1000)
-        
+
         output_dict = {
             'framewise_output': framewise_output,
             'clipwise_output': clipwise_output,
             'embedding': cla}
-            
+
         return output_dict
