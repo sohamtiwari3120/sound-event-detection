@@ -551,7 +551,10 @@ def inference_prob_overlap(self):
         for n in range(audios_num):
             audio_name = audio_files[n]
             #print('Predicting on {}'.format(audio_name))
-            audio_duration = librosa.get_duration(filename=audio_name)
+            try:
+                audio_duration = librosa.get_duration(filename=audio_name)
+            except Exception as e:
+                print(e)
             predict_length += audio_duration
             #print('Total audio duration: {} s'.format(audio_duration))
             num_segment = 1
@@ -559,7 +562,10 @@ def inference_prob_overlap(self):
             start = 0
             end = 0
             merged = None
-            (audio_full, fs) = librosa.core.load(audio_name, sr=sample_rate, mono=True)
+            try:
+                (audio_full, fs) = librosa.core.load(audio_name, sr=sample_rate, mono=True)
+            except Exception as e:
+                print(e)
             audio_full = pad_truncate_sequence(audio_full, audio_samples)
             while end <= audio_duration:
                 # Load audio sample
