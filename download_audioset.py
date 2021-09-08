@@ -29,6 +29,7 @@ def main(args):
     # Extract videos from YouTube
     audio_downloader = YoutubeDL({'format':'bestaudio'})
     error_count = 0
+    error_files = []
     
     for file in tqdm(distinct_set):
         try:
@@ -38,8 +39,10 @@ def main(args):
             os.system((command))
         except Exception:
             error_count += 1
+            error_files.append(file[0])
             print("Couldn\'t download the audio")
     print('Number of files that could not be downloaded:', error_count)
+    print(f"Could not download the following files:\n{error_files}")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Extract AudioSet')
