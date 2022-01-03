@@ -150,3 +150,9 @@ utils/
 *.pyc
 
 _tmp_submission/
+VOICe/3dB.ipynb
+VOICe/9dB.ipynb
+VOICe/VOICe.ipynb
+VOICe/
+YOHO/
+dcase-2019-task-4/
