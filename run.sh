@@ -1,9 +1,9 @@
 #!/bin/bash
 # You need to modify this path to your downloaded dataset directory
-DATASET_DIR="--dataset_dir=../../../../../storage/leey0204/fsd50k_audioset/audioset/dataset"
+DATASET_DIR="../audioset_st/audioset_st/audio_8k"
 
 # You need to modify this path to your workspace to store features and models
-WORKSPACE="--dataset_dir=../../../../../storage/leey0204/fsd50k_audioset/audioset"
+WORKSPACE="."
 
 # Set model type
 MODEL_TYPE="Cnn_9layers_Gru_FrameAtt"

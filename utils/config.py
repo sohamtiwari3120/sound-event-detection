@@ -2,8 +2,8 @@ sample_rate = 32000
 audio_duration = 10     # Audio clips have durations of 10 seconds
 audio_samples = sample_rate * audio_duration
 
-# Hyper-parameters follow [1] Kong, Q., Cao, Y., Iqbal, T., Wang, 
-# Y., Wang, W. and Plumbley, M. D., 2019. PANNs: Large-Scale Pretrained Audio 
+# Hyper-parameters follow [1] Kong, Q., Cao, Y., Iqbal, T., Wang,
+# Y., Wang, W. and Plumbley, M. D., 2019. PANNs: Large-Scale Pretrained Audio
 # Neural Networks for Audio Pattern Recognition. arXiv preprint arXiv:1912.10211.
 mel_bins = 64
 fmin = 50
@@ -24,11 +24,11 @@ ids = ['/m/028ght', '/m/0lyf6', '/m/07rkbfh', '/m/053hz1', '/m/0ytgt', '/m/0l15b
 
 # Name of classes
 labels = ['Applause', 'Breathing', 'Chatter', 'Cheering', 'Child_speech_kid_speaking', 'Clapping', 'Conversation', 'Cough', 'Crowd', 'Crying_sobbing', 'Female_speech_woman_speaking', 'Laughter', 'Male_speech_man_speaking', 'Run', 'Screaming', 'Shout', 'Sneeze', 'Walk_footsteps', 'Whispering', 'Air_horn_truck_horn', 'Car_alarm', 'Emergency_vehicle', 'Explosion', 'Gunshot_gunfire', 'Siren']
-       
+
 # Number of training samples of sound classes
-samples_num = [441, 407, 273, 337, 624, 2399, 2399, 1506, 744, 2020, 1617, 
+samples_num = [441, 407, 273, 337, 624, 2399, 2399, 1506, 744, 2020, 1617,
     25744, 3724, 3745, 7090, 3291, 2301]
-    
+
 classes_num = len(labels)
 lb_to_idx = {lb: idx for idx, lb in enumerate(labels)}
 idx_to_lb = {idx: lb for idx, lb in enumerate(labels)}
