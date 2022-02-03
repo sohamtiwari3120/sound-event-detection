@@ -630,24 +630,15 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
 
         interpolate_ratio = 8
 
-        print(f"#############################")
-        print(f"#### DEBUGGING STARTS #######")
-        print(f"\n{input.shape}")
-        print(input)
         wavs = [wav for wav in input.squeeze(1)]
-        print(f"\n\n wavs {len(wavs)}")
-        print(wavs)
 
         out_s3prl = self.extractor_s3prl(wavs)['last_hidden_state']
-        print(f"\n\n {self.s3prl_feature_type}:\n{out_s3prl}")
 
 
 
         if self.feature_type == 'logmel':
             x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
-            print(f"\n\nspectrogram librosa:\n{x}")
             x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
-            print(f"\n\nlogmel spectrogram librosa:\n{x}")
         elif self.feature_type == 'cqt':
             x = self.stft_extractor(input)
             x = self.cqt_extractor(x)
@@ -657,16 +648,13 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
             x = x.transpose(2,3)
             x = x.to('cuda')
 
-        print(f"Before transpose 1:\n{x}")
         x = x.transpose(1, 3)
-        print(f"Before bn0 1:\n{x}")
         x = self.bn0(x)
         x = x.transpose(1, 3)
 
         # SpecAugmnet on spectrogram
         if self.training and spec_augment:
             x = self.spec_augmenter(x)
-            print(f"After spec_augmenter:\n{x}")
 
 
         # Mixup on spectrogram
@@ -707,8 +695,6 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
             'clipwise_output': clipwise_output,
             'embedding': cla}
 
-        print(f"#### DEBUGGING ENDS #########")
-        print(f"#############################")
         return output_dict
 
 
@@ -2281,25 +2267,17 @@ class VGGish(nn.Module):
         )
 
     def forward(self, x):
-        print(x.size())
         x = self.features(x).permute(0, 2, 3, 1).contiguous()
-        print(x.size())
         x = x.view(x.size(0), -1)
-        print(x.size())
         x = self.fc(x)
         return x
 
 def frame(data, window_length, hop_length):
     num_samples = data.size()[2]
-    print('NUM_SAMPLES', num_samples)
     num_frames = 1 + int(np.floor((num_samples - window_length) / hop_length))
-    print('NUM_FRAMES', num_frames)
     shape = (data.size()[0], 1, num_frames * window_length) + data.shape[3:]
-    print('SHAPE', shape)
     strides = (data.stride()[2] * hop_length,) + data.stride()[1:]
-    print('STRIDES', strides)
     waves = torch.as_strided(data, size=shape, stride=strides)
-    print(waves.size())
 
     return waves
 

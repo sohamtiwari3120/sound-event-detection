@@ -665,7 +665,6 @@ def predict_asr(self):
                         xml_string_list.append('\t\t<SoundSegment stime="{}" dur="{}" event="{}">{}</SoundSegment>\n'.format(onset, offset-onset, event_label, event_label))
                         print('onset: {}, offset: {}, event_label: {}\n'.format(onset, offset, event_label))
             else:
-                print('Others\n')
                 xml_string_list.append('\t\t<SoundSegment stime="{}" dur="{}">Others</SoundSegment>\n'.format(start, end-start))
             end_time = time.time()
             print('Time taken to process {}: {} s\n'.format(audio_name, end_time-start_time))

@@ -263,7 +263,6 @@ def train(args):
 
         # loss
         loss = loss_func(batch_output_dict, batch_target_dict)
-        print(iteration, loss)
 
         # Backward
         optimizer.zero_grad()

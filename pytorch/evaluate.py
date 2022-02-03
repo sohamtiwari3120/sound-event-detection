@@ -16,8 +16,8 @@ def sed_average_precision(strong_target, framewise_output, average):
       framewise_output: (N, frames_num, classes_num)
       average: None | 'macro' | 'micro'
     """
-    print('TARGET:', strong_target)
-    print('OUTPUT:', framewise_output)
+    # print('TARGET:', strong_target)
+    # print('OUTPUT:', framewise_output)
     assert strong_target.shape == framewise_output.shape
     (N, time_steps, classes_num) = strong_target.shape
 
