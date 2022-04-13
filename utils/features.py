@@ -312,6 +312,9 @@ def pack_audio_files_to_hdf5(args):
                     audio_path, sr=sample_rate, mono=True)
             except ValueError:
                 print(audio_path)
+            except FileNotFoundError:
+                    command = f"python download_audioset.py --workspace=$WORKSPACE --data_type={data_type} --start_index={n} --stop_index={n+1}"
+                    os.system((command))
             audio = pad_truncate_sequence(audio, audio_samples)
 
             hf['audio_name'][n] = audio_name.encode()
