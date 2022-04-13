@@ -77,7 +77,6 @@ def train(args):
     timeshift = False
     spec_augment = False
 
-    weak_loss_func = get_loss_func(loss_type)
     if loss_type == 'clip_bce':
         strong_loss_func = get_loss_func('frame_bce')
     elif loss_type == 'clip_bce_logits':
@@ -113,33 +112,23 @@ def train(args):
     frames_per_second = sample_rate // hop_size
     file_header = ''
 
-    # Paths
-    if mini_data:
-        prefix = 'minidata_'
-    else:
-        prefix = ''
-
-    # HDF5 file paths
-    weak_train_hdf5_path = os.path.join(workspace, 'hdf5s',
-        '{}weak_training_{}_{}.h5'.format(prefix, feature_type, quality))
+    prefix = ''
 
     strong_train_hdf5_path = os.path.join(workspace, 'hdf5s',
-    '{}strong_training_{}_{}.h5'.format(prefix, feature_type, quality))
+    'train_{}_{}_st.h5'.format(feature_type, quality))
 
     strong_valid_hdf5_path = os.path.join(workspace, 'hdf5s',
-    '{}strong_validation_{}_{}.h5'.format(prefix, feature_type, quality))
+    'eval_{}_{}_st.h5'.format(feature_type, quality))
 
-    test_hdf5_path = os.path.join(workspace, 'hdf5s',
-        '{}testing_{}_{}.h5'.format(prefix, feature_type, quality))
-
-    if fsd50k:
-        strong_fsd50k_hdf5_path = os.path.join(workspace, 'hdf5s',
-        '{}strong_fsd50k.h5'.format(prefix))
-        file_header = 'fsd50k'
+    # test_hdf5_path = os.path.join(workspace, 'hdf5s',
+    #     '{}testing_{}_{}.h5'.format(feature_type, quality))
 
     # Groundtruth file paths
-    strong_valid_reference_csv_path = os.path.join(dataset_dir, 'metadata', 'strong',
-    'groundtruth_strong_label_strong_validation_set.csv')
+    strong_train_reference_csv_path = os.path.join(dataset_dir, 'metadata',
+    'groundtruth_strong_label_train_set.csv')
+
+    strong_valid_reference_csv_path = os.path.join(dataset_dir, 'metadata',
+    'groundtruth_strong_label_eval_set.csv')
 
     test_reference_csv_path = os.path.join(dataset_dir, 'metadata',
         'groundtruth_strong_label_testing_set.csv')
@@ -226,34 +215,23 @@ def train(args):
     # Dataset
     dataset = AudiosetDataset()
 
-    # Sampler
-    weak_train_sampler = TrainSampler(
-        hdf5_path=weak_train_hdf5_path,
-        batch_size=(batch_size * 3) * 2 if 'mixup' in augmentation else batch_size)
+    # # Sampler
+    # weak_train_sampler = TrainSampler(
+    #     hdf5_path=weak_train_hdf5_path,
+    #     batch_size=(batch_size * 3) * 2 if 'mixup' in augmentation else batch_size)
 
     strong_train_sampler = TrainSampler(
         hdf5_path=strong_train_hdf5_path,
         batch_size=batch_size * 2 if 'mixup' in augmentation else batch_size)
 
-    if fsd50k:
-        strong_fsd50k_sampler = TrainSampler(
-            hdf5_path=strong_fsd50k_hdf5_path,
-            batch_size=batch_size * 2 if 'mixup' in augmentation else batch_size)
-
-        strong_fsd50k_loader = torch.utils.data.DataLoader(dataset=dataset,
-            batch_sampler=strong_fsd50k_sampler, collate_fn=collate_fn,
-            num_workers=num_workers, pin_memory=True)
-
-        strong_fsd50k_iter = cycle_iteration(strong_fsd50k_loader)
-
     strong_valid_sampler = TestSampler(hdf5_path=strong_valid_hdf5_path, batch_size=batch_size)
 
-    test_sampler = TestSampler(hdf5_path=test_hdf5_path, batch_size=batch_size)
+    # test_sampler = TestSampler(hdf5_path=test_hdf5_path, batch_size=batch_size)
 
     # Data loader
-    weak_train_loader = torch.utils.data.DataLoader(dataset=dataset,
-        batch_sampler=weak_train_sampler, collate_fn=collate_fn,
-        num_workers=num_workers, pin_memory=True)
+    # weak_train_loader = torch.utils.data.DataLoader(dataset=dataset,
+    #     batch_sampler=weak_train_sampler, collate_fn=collate_fn,
+    #     num_workers=num_workers, pin_memory=True)
 
     strong_train_loader = torch.utils.data.DataLoader(dataset=dataset,
         batch_sampler=strong_train_sampler, collate_fn=collate_fn,
@@ -263,11 +241,11 @@ def train(args):
         batch_sampler=strong_valid_sampler, collate_fn=collate_fn,
         num_workers=num_workers, pin_memory=True)
 
-    test_loader = torch.utils.data.DataLoader(dataset=dataset,
-        batch_sampler=test_sampler, collate_fn=collate_fn,
-        num_workers=num_workers, pin_memory=True)
+    # test_loader = torch.utils.data.DataLoader(dataset=dataset,
+    #     batch_sampler=test_sampler, collate_fn=collate_fn,
+    #     num_workers=num_workers, pin_memory=True)
 
-    weak_iter = cycle_iteration(weak_train_loader)
+    # weak_iter = cycle_iteration(weak_train_loader)
     strong_iter = cycle_iteration(strong_train_loader)
 
     # Determine augmentation techniques to use
@@ -303,7 +281,9 @@ def train(args):
 
             train_fin_time = time.time()
 
-            for (data_type, data_loader, reference_csv_path) in [('valid', strong_valid_loader, strong_valid_reference_csv_path), ('test', test_loader, test_reference_csv_path)]:
+            for (data_type, data_loader, reference_csv_path) in [('eval', strong_valid_loader, strong_valid_reference_csv_path), 
+            # ('test', test_loader, test_reference_csv_path)
+            ]:
 
                 # Calculate tatistics
                 (statistics, _) = evaluator.evaluate(
@@ -316,7 +296,7 @@ def train(args):
 
                 statistics_container.append(data_type, iteration, statistics)
 
-                if data_type == 'valid':
+                if data_type == 'eval':
                     if np.nanmean(statistics['framewise_ap']) >= best_framewise_map and statistics['sed_metrics']['overall']['error_rate']['error_rate'] < best_error_rate <= best_error_rate:
 
                         best_framewise_map = np.nanmean(statistics['framewise_ap'])
@@ -345,60 +325,42 @@ def train(args):
             train_bgn_time = time.time()
 
         # Load samples
-        weak_batch_data_dict = next(weak_iter)
+        # weak_batch_data_dict = next(weak_iter)
         strong_batch_data_dict = next(strong_iter)
-        if fsd50k:
-            strong_fsd50k_batch_data_dict = next(strong_fsd50k_iter)
 
         if 'mixup' in augmentation:
-            weak_batch_data_dict['mixup_lambda'] = mixup_augmenter.get_lambda(
-                batch_size=len(weak_batch_data_dict['waveform']))
+            # weak_batch_data_dict['mixup_lambda'] = mixup_augmenter.get_lambda(
+            #     batch_size=len(weak_batch_data_dict['waveform']))
             strong_batch_data_dict['mixup_lambda'] = mixup_augmenter.get_lambda(
                 batch_size=len(strong_batch_data_dict['waveform']))
-            if fsd50k:
-                strong_fsd50k_batch_data_dict['mixup_lambda'] = mixup_augmenter.get_lambda(
-                    batch_size=len(strong_fsd50k_batch_data_dict['waveform']))
 
         # Move data to GPU
-        for key in weak_batch_data_dict.keys():
-            weak_batch_data_dict[key] = move_data_to_device(weak_batch_data_dict[key], device)
+        # for key in weak_batch_data_dict.keys():
+        #     weak_batch_data_dict[key] = move_data_to_device(weak_batch_data_dict[key], device)
         for key in strong_batch_data_dict.keys():
             strong_batch_data_dict[key] = move_data_to_device(strong_batch_data_dict[key], device)
-        if fsd50k:
-            for key in strong_fsd50k_batch_data_dict.keys():
-                strong_fsd50k_batch_data_dict[key] = move_data_to_device(strong_fsd50k_batch_data_dict[key], device)
 
         # Train
         model.train()
 
         if 'mixup' in augmentation:
-            weak_batch_output_dict = model(weak_batch_data_dict['waveform'], weak_batch_data_dict['mixup_lambda'], timeshift=timeshift, spec_augment=spec_augment)
-            weak_batch_target_dict = {'target': do_mixup(weak_batch_data_dict['target'], weak_batch_data_dict['mixup_lambda'])}
-            strong_batch_output_dict = model(strong_batch_data_dict['waveform'], strong_batch_data_dict['mixup_lambda'], timeshift=timeshift, spec_augment=spec_augment)
+            # weak_batch_output_dict = model(weak_batch_data_dict['waveform'], weak_batch_data_dict['mixup_lambda'], timeshift=timeshift, spec_augment=spec_augment)
+            # weak_batch_target_dict = {'target': do_mixup(weak_batch_data_dict['target'], weak_batch_data_dict['mixup_lambda'])}
+            # strong_batch_output_dict = model(strong_batch_data_dict['waveform'], strong_batch_data_dict['mixup_lambda'], timeshift=timeshift, spec_augment=spec_augment)
             strong_batch_target_dict = {'strong_target': do_mixup(strong_batch_data_dict['strong_target'], strong_batch_data_dict['mixup_lambda'])}
-            if fsd50k:
-                strong_fsd50k_batch_output_dict = model(strong_fsd50k_batch_data_dict['waveform'], strong_fsd50k_batch_data_dict['mixup_lambda'], timeshift=timeshift, spec_augment=spec_augment)
-                strong_fsd50k_batch_target_dict = {'strong_target': do_mixup(strong_fsd50k_batch_data_dict['strong_target'], strong_fsd50k_batch_data_dict['mixup_lambda'])}
 
         else:
-            weak_batch_output_dict = model(weak_batch_data_dict['waveform'], None, timeshift=timeshift, spec_augment=spec_augment)
-            weak_batch_target_dict = {'target': weak_batch_data_dict['target']}
+            # weak_batch_output_dict = model(weak_batch_data_dict['waveform'], None, timeshift=timeshift, spec_augment=spec_augment)
+            # weak_batch_target_dict = {'target': weak_batch_data_dict['target']}
             strong_batch_output_dict = model(strong_batch_data_dict['waveform'], None, timeshift=timeshift, spec_augment=spec_augment)
             strong_batch_target_dict = {'strong_target': strong_batch_data_dict['strong_target']}
-            if fsd50k:
-                strong_fsd50k_batch_output_dict = model(strong_fsd50k_batch_data_dict['waveform'], None)
-                strong_fsd50k_batch_target_dict = {'strong_target': strong_fsd50k_batch_data_dict['strong_target']}
 
         # loss
-        weak_loss = weak_loss_func(weak_batch_output_dict, weak_batch_target_dict)
+        # weak_loss = weak_loss_func(weak_batch_output_dict, weak_batch_target_dict)
         strong_loss = strong_loss_func(strong_batch_output_dict, strong_batch_target_dict)
-        if fsd50k:
-            strong_fsd50k_loss = strong_loss_func(strong_fsd50k_batch_output_dict, strong_fsd50k_batch_target_dict)
-            loss = weak_loss + strong_loss + strong_fsd50k_loss
-            print('{} iteration - weak: {}, strong: {}, total: {}'.format(iteration, weak_loss, strong_loss, strong_fsd50k_loss, loss))
-        else:
-            loss = weak_loss + strong_loss
-            print('{} iteration - weak: {}, strong: {}, total: {}'.format(iteration, weak_loss, strong_loss, loss))
+
+        loss = strong_loss
+        print('{} iteration - weak: {}, strong: {}, total: {}'.format(iteration, weak_loss, strong_loss, loss))
 
         # Backward
         optimizer.zero_grad()
