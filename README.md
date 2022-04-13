@@ -1,3 +1,11 @@
+
+
+
+<!-- NOTE: -->
+<!-- batch_size = 32, was the original batch size used by yanzhen -->
+
+
+
 # Sound Event Detection with Human and Emergency Sounds
 
 ## Dataset
@@ -44,7 +52,7 @@ The pre-trained models were trained on both the weakly-labelled and strongly-lab
 
 If you would like to test the performance of the pre-trained model on the test set yourself, please follow the instructions in the **Dataset** section to download the test set and then run the following commands:
 ```
-python pytorch/main_strong.py inference_prob_overlap --dataset_dir=$DATASET_DIR --workspace=$WORKSPACE --holdout_fold=1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='mixup' --batch_size=32 --feature_type='logmel' --cuda --sed_thresholds --audio_16k --data_type='testing'
+python pytorch/main_strong.py inference_prob_overlap --dataset_dir=$DATASET_DIR --workspace=$WORKSPACE --holdout_fold=1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='mixup' --batch_size=$BATCH_SIZE --feature_type='logmel' --cuda --sed_thresholds --audio_16k --data_type='testing'
 ```
 
 ## Predicition System
@@ -56,7 +64,7 @@ Instructions (more details can be found in run.sh):
 
 2. Run the following command:
     ```
-    python pytorch/predict.py predict --input_dir=$INPUT_DIR --workspace=$WORKSPACE --filename='main_strong' --holdout_fold 1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='mixup' --batch_size=32 --feature_type='logmel' --cuda --sample_duration=5 --overlap --overlap_value=1 --sed_thresholds
+    python pytorch/predict.py predict --input_dir=$INPUT_DIR --workspace=$WORKSPACE --filename='main_strong' --holdout_fold 1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='mixup' --batch_size=$BATCH_SIZE --feature_type='logmel' --cuda --sample_duration=5 --overlap --overlap_value=1 --sed_thresholds
     ```
     
 3. The prediction output is saved in the 'predict_results' directory in the following xml format:
@@ -67,7 +75,7 @@ Note:
 - Integration with Automatic Speech Recognition (ASR)
     - If you would like to run the system integrated with DeepSpeech ASR, please run the following command:
     ```
-    python pytorch/predict.py predict_asr --input_dir=$INPUT_DIR --workspace=$WORKSPACE --filename='main_strong' --holdout_fold=1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='mixup' --batch_size=32 --feature_type='logmel' --cuda --sample_duration=5 --overlap --overlap_value=1 --sed_thresholds --language='eng'
+    python pytorch/predict.py predict_asr --input_dir=$INPUT_DIR --workspace=$WORKSPACE --filename='main_strong' --holdout_fold=1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='mixup' --batch_size=$BATCH_SIZE --feature_type='logmel' --cuda --sample_duration=5 --overlap --overlap_value=1 --sed_thresholds --language='eng'
     ```
     - In this system, ASR is activated whenever Male_speech_man_speaking, Female_speech_woman_speaking and Child_speech_kid_speaking events are detected.
 
@@ -118,27 +126,27 @@ Instructions (more details can be found in run.sh):
 
     If only doing weak training:
     ```
-    python pytorch/main.py train --dataset_dir=$DATASET_DIR --workspace=$WORKSPACE --holdout_fold=1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='specaugment_mixup' --learning_rate=1e-3 --batch_size=32 --resume_iteration=0 --stop_iteration=50000 --feature_type='logmel' --cuda
+    python pytorch/main.py train --dataset_dir=$DATASET_DIR --workspace=$WORKSPACE --holdout_fold=1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='specaugment_mixup' --learning_rate=1e-3 --batch_size=$BATCH_SIZE --resume_iteration=0 --stop_iteration=50000 --feature_type='logmel' --cuda
     ```
     If doing combined weak and strong training:
     ```
-    python pytorch/main_strong.py train --dataset_dir=$DATASET_DIR --workspace=$WORKSPACE --holdout_fold=1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='specaugment_mixup' --learning_rate=1e-3 --batch_size=32 --resume_iteration=0 --stop_iteration=50000 --feature_type='logmel' --cuda --audio_16k
+    python pytorch/main_strong.py train --dataset_dir=$DATASET_DIR --workspace=$WORKSPACE --holdout_fold=1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='specaugment_mixup' --learning_rate=1e-3 --batch_size=$BATCH_SIZE --resume_iteration=0 --stop_iteration=5000 --feature_type='logmel' --cuda --audio_16k
     ```
 
 3. Optimize thresholds (optional but strongly recommended)
     
     ```
-    python utils/optimize_thresholds.py optimize_sed_thresholds  --dataset_dir=$DATASET_DIR --workspace=$WORKSPACE --filename='main_strong' --holdout_fold=1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='specaugment_mixup' --feature_type='logmel' --batch_size=32 --audio_16k
+    python utils/optimize_thresholds.py optimize_sed_thresholds  --dataset_dir=$DATASET_DIR --workspace=$WORKSPACE --filename='main_strong' --holdout_fold=1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='specaugment_mixup' --feature_type='logmel' --batch_size=$BATCH_SIZE --audio_16k
     ```
 
 4. Evaluate and Calculate metrics:
 
     If using optimized thresholds:
     ```
-    python pytorch/main_strong.py inference_prob_overlap --dataset_dir=$DATASET_DIR --workspace=$WORKSPACE --holdout_fold=1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='specaugment_mixup' --batch_size=32 --feature_type='logmel' --cuda --audio_16k --sed_thresholds
+    python pytorch/main_strong.py inference_prob_overlap --dataset_dir=$DATASET_DIR --workspace=$WORKSPACE --holdout_fold=1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='specaugment_mixup' --batch_size=$BATCH_SIZE --feature_type='logmel' --cuda --audio_16k --sed_thresholds --data_type='testing'
     ```
     If not using optimized thresholds:
     ```
-    python pytorch/main_strong.py inference_prob_overlap --dataset_dir=$DATASET_DIR --workspace=$WORKSPACE --holdout_fold=1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='specaugment_mixup' --batch_size=32 --feature_type='logmel' --cuda --audio_16k
+    python pytorch/main_strong.py inference_prob_overlap --dataset_dir=$DATASET_DIR --workspace=$WORKSPACE --holdout_fold=1 --model_type=$MODEL_TYPE --loss_type='clip_bce' --augmentation='specaugment_mixup' --batch_size=$BATCH_SIZE --feature_type='logmel' --cuda --audio_16k --data_type='testing'
     ```
 

@@ -107,7 +107,7 @@ def read_strong_csv(strong_meta_csv_path):
     """
     with open(strong_meta_csv_path, 'r') as fr:
         reader = csv.reader(fr, delimiter=',')
-        lines = list(reader)
+        lines = list(reader)[1:] #skipping header
 
     meta_dict = {}
     for line in lines:
