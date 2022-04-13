@@ -360,7 +360,7 @@ def train(args):
         strong_loss = strong_loss_func(strong_batch_output_dict, strong_batch_target_dict)
 
         loss = strong_loss
-        print('{} iteration - weak: {}, strong: {}, total: {}'.format(iteration, weak_loss, strong_loss, loss))
+        print('{} iteration - strong: {}, total: {}'.format(iteration, strong_loss, loss))
 
         # Backward
         optimizer.zero_grad()
