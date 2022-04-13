@@ -299,8 +299,8 @@ def official_evaluate(reference_csv_path, prediction_csv_path):
       prediction_csv_path: str
     """
     reference_event_list = sed_eval.io.load_event_list(reference_csv_path, 
-        delimiter=',', csv_header=True,
-        # fields=['filename','onset','offset','event_label']
+        delimiter=',', csv_header=False,
+        fields=['filename','onset','offset','event_label']
         )
     
     #print('REFERENCE', reference_event_list)
