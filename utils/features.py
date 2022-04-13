@@ -310,12 +310,18 @@ def pack_audio_files_to_hdf5(args):
             try:
                 (audio, fs) = librosa.core.load(
                     audio_path, sr=sample_rate, mono=True)
-            except ValueError:
+                audio = pad_truncate_sequence(audio, audio_samples)
+            except Exception as e:
                 print(audio_path)
-            except FileNotFoundError:
-                    command = f"python download_audioset.py --workspace=$WORKSPACE --data_type={data_type} --start_index={n} --stop_index={n+1}"
-                    os.system((command))
-            audio = pad_truncate_sequence(audio, audio_samples)
+                command = f"python download_audioset.py --workspace=$WORKSPACE --data_type={data_type} --start_index={n} --stop_index={n+1}"
+                os.system((command))
+                try:
+                    (audio, fs) = librosa.core.load(
+                    audio_path, sr=sample_rate, mono=True)
+                    audio = pad_truncate_sequence(audio, audio_samples)
+                except Exception as e:
+                    print(f'ERROR: failed redownload of {audio_path}')
+                    continue
 
             hf['audio_name'][n] = audio_name.encode()
             hf['waveform'][n] = float32_to_int16(audio)

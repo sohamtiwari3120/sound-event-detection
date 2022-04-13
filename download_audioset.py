@@ -19,10 +19,10 @@ def main(args):
     data_path = os.path.join(workspace, 'dataset', data_type)
     os.makedirs(data_path, exist_ok=True)
     
-    csv_path = os.path.join(workspace, 'metadata', '{}_set.csv'.format(data_type))
+    csv_path = os.path.join(workspace, 'metadata', 'groundtruth_strong_label_{data_type}_set.csv'.format(data_type))
     df = pd.read_csv(csv_path, header=None)
-    distinct_files = df[0].unique()
-    distinct_set = [(x, df[1].loc[df[0] == x].unique()[0]) for x in distinct_files]
+    distinct_files = df['segment_id'].unique()
+    distinct_set = [(s[:s.rindex('_')], int(s[s.rindex('_')+1:])/1000) for s in distinct_files]
     print(len(distinct_set))
     total_num = len(distinct_set)
     root = os.getcwd()

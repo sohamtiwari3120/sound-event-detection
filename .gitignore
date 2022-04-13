@@ -145,8 +145,6 @@ sound-event-detection/dataset/
 
 *.wav
 
-utils/
-
 *.pyc
 
 _tmp_submission/
