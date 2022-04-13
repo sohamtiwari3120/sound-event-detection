@@ -1,3 +1,6 @@
+from random import sample
+
+
 sample_rate = 16000
 audio_duration = 10     # Audio clips have durations of 10 seconds
 audio_samples = sample_rate * audio_duration
@@ -7,9 +10,9 @@ audio_samples = sample_rate * audio_duration
 # Neural Networks for Audio Pattern Recognition. arXiv preprint arXiv:1912.10211.
 mel_bins = 64
 fmin = 50
-fmax = 14000
-window_size = 1024
-hop_size = 320
+fmax = sample_rate/2
+window_size = 1024 * sample_rate//32000
+hop_size = 320 * sample_rate//32000
 frames_per_second = sample_rate // hop_size
 window = 'hann'
 pad_mode = 'reflect'
