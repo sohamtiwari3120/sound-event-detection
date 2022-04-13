@@ -113,7 +113,7 @@ def read_strong_csv(strong_meta_csv_path):
     for line in lines:
         """line: ['-5QrBL6MzLg_60.000_70.000.wav', '0.917', '2.029', 'Train horn']"""
         [_, _, segment_id, onset, offset, _, _, label] = line
-        meta = {'onset': onset, 'offset': offset, 'label': label}
+        meta = {'onset': onset, 'offset': offset, 'label': label, 'audio_name': f"{segment_id[:segment_id.rindex('_')]}_{int(segment_id[segment_id.rindex('_')+1:])//1000}.wav"}
         if segment_id in meta_dict:
             meta_dict[segment_id].append(meta)
         else:
@@ -305,7 +305,7 @@ def pack_audio_files_to_hdf5(args):
         for n in range(audios_num):
             print(n)
             # weak_meta_dict = weak_meta_list[n]
-            audio_name = audio_names[n]
+            audio_name = audio_names[n]['audio_name']
             audio_path = os.path.join(audios_dir, audio_name)
             try:
                 (audio, fs) = librosa.core.load(
