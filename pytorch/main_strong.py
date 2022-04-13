@@ -346,7 +346,7 @@ def train(args):
         if 'mixup' in augmentation:
             # weak_batch_output_dict = model(weak_batch_data_dict['waveform'], weak_batch_data_dict['mixup_lambda'], timeshift=timeshift, spec_augment=spec_augment)
             # weak_batch_target_dict = {'target': do_mixup(weak_batch_data_dict['target'], weak_batch_data_dict['mixup_lambda'])}
-            # strong_batch_output_dict = model(strong_batch_data_dict['waveform'], strong_batch_data_dict['mixup_lambda'], timeshift=timeshift, spec_augment=spec_augment)
+            strong_batch_output_dict = model(strong_batch_data_dict['waveform'], strong_batch_data_dict['mixup_lambda'], timeshift=timeshift, spec_augment=spec_augment)
             strong_batch_target_dict = {'strong_target': do_mixup(strong_batch_data_dict['strong_target'], strong_batch_data_dict['mixup_lambda'])}
 
         else:
