@@ -1,6 +1,3 @@
-from random import sample
-
-
 sample_rate = 16000
 audio_duration = 10     # Audio clips have durations of 10 seconds
 audio_samples = sample_rate * audio_duration
