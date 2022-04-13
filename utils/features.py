@@ -136,13 +136,13 @@ def get_weak_target(labels, lb_to_idx):
     target = np.zeros(classes_num, dtype=np.bool)
 
     for label in labels:
-        target[lb_to_idx[label]] = 1.
+        target[lb_to_idx(label)] = 1.
 
     return target
 
 
 def get_strong_target(audio_name, strong_meta_dict, frames_num,
-                      frames_per_second, lb_to_idx):
+                      frames_per_second, lb_to_idx, classes_num):
     """Reformat strongly labelled target to matrix format. 
 
     Args:
@@ -162,7 +162,7 @@ def get_strong_target(audio_name, strong_meta_dict, frames_num,
 
     meta_list = strong_meta_dict[audio_name]
 
-    target = np.zeros((frames_num, len(lb_to_idx)), dtype=np.bool)
+    target = np.zeros((frames_num, classes_num), dtype=np.bool)
 
     for meta in meta_list:
         onset = float(meta['onset'])
@@ -170,7 +170,7 @@ def get_strong_target(audio_name, strong_meta_dict, frames_num,
         offset = float(meta['offset'])
         end_frame = int(round(offset * frames_per_second)) + 1
         label = meta['label']
-        idx = lb_to_idx[label]
+        idx = lb_to_idx(label)
 
         target[bgn_frame: end_frame, idx] = 1
 
@@ -329,7 +329,7 @@ def pack_audio_files_to_hdf5(args):
 
             strong_target = get_strong_target(
                 segment_id, strong_meta_dict,
-                frames_num, frames_per_second, lb_to_idx)
+                frames_num, frames_per_second, lb_to_idx, classes_num)
 
             hf['strong_target'].resize((n + 1, frames_num, classes_num))
             hf['strong_target'][n] = strong_target
