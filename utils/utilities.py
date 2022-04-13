@@ -313,7 +313,7 @@ def official_evaluate(reference_csv_path, prediction_csv_path):
     evaluated_event_labels = labels#reference_event_list.unique_event_labels
     files={}
     for event in reference_event_list:
-        files[event['filename']] = event['segment_id']
+        files[event['filename']] = event['filename']
 
     evaluated_files = sorted(list(files.keys()))
     
@@ -325,7 +325,7 @@ def official_evaluate(reference_csv_path, prediction_csv_path):
     for file in evaluated_files:
         reference_event_list_for_current_file = []
         for event in reference_event_list:
-            if event['segment_id'] == file:
+            if event['filename'] == file:
                 reference_event_list_for_current_file.append(event)
                 estimated_event_list_for_current_file = []
         for event in estimated_event_list:
