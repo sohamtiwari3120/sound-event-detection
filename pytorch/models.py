@@ -617,7 +617,7 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
         self.gru = nn.GRU(input_size=512, hidden_size=256, num_layers=1,
             bias=True, batch_first=True, bidirectional=True)
 
-        self.att_block = AttBlock(n_in=512, n_out=25, activation='sigmoid')
+        self.att_block = AttBlock(n_in=512, n_out=classes_num, activation='sigmoid')
 
         self.init_weights()
 
