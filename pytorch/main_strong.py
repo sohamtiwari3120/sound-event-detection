@@ -711,7 +711,7 @@ def inference_prob_overlap(self):
     if audio_8k:
         audios_dir = os.path.join(dataset_dir, data_type, '8k')
     else:
-        audios_dir = os.path.join(dataset_dir, data_type)
+        audios_dir = os.path.join(dataset_dir, f'{data_type}_all')
     gt_csv = pd.read_csv(reference_csv_path, header=None)
     audio_files = gt_csv[0].unique()
     audio_files = ['{}/{}'.format(audios_dir, x) for x in audio_files]
