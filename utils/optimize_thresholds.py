@@ -366,7 +366,7 @@ def optimize_sed_thresholds(args):
     audio_samples = config.audio_samples
     frames_per_second = config.sample_rate
     
-    strong_valid_hdf5_path = os.path.join(workspace, 'hdf5s', f'{}_{}_{}_st.h5'.format(data_type, feature_type, quality))
+    strong_valid_hdf5_path = os.path.join(workspace, 'hdf5s', '{}_{}_{}_st.h5'.format(data_type, feature_type, quality))
     
     valid_reference_csv_path = os.path.join(dataset_dir, 'metadata',
            f'groundtruth_strong_label_{data_type}_set.csv')
