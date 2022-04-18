@@ -321,7 +321,7 @@ def optimize_sed_thresholds(args):
     classes_num = config.classes_num
     
     num_workers = 8
-    data_type = 'valid'
+    data_type = 'eval'
     
     # Paths
 #    if feature_type == 'logmel' and not audio_8k and not audio_16k:
@@ -363,13 +363,13 @@ def optimize_sed_thresholds(args):
         fmin = 50
         fmax = 14000
     
-    audio_samples = sample_rate * 10
-    frames_per_second = sample_rate // hop_size
+    audio_samples = config.audio_samples
+    frames_per_second = config.sample_rate
     
-    strong_valid_hdf5_path = os.path.join(workspace, 'hdf5s', 'strong_validation_{}_{}.h5'.format(feature_type, quality))
+    strong_valid_hdf5_path = os.path.join(workspace, 'hdf5s', f'{}_{}_{}_st.h5'.format(data_type, feature_type, quality))
     
-    valid_reference_csv_path = os.path.join(dataset_dir, 'metadata', 'strong',
-           'groundtruth_strong_label_strong_validation_set.csv')
+    valid_reference_csv_path = os.path.join(dataset_dir, 'metadata',
+           f'groundtruth_strong_label_{data_type}_set.csv')
     
     submission_name = '_submission_{}.csv'.format(quality)
     checkpoint_name = 'best_{}_{}.pth'.format(feature_type, quality)
@@ -425,7 +425,7 @@ def optimize_sed_thresholds(args):
     evaluator = Evaluator(model=model)
 
     for (data_type, data_loader, reference_csv_path) in [
-        ('valid', valid_loader, valid_reference_csv_path)]:
+        ('eval', valid_loader, valid_reference_csv_path)]:
 
         print('Inferencing {} data in about 1 min ...'.format(data_type))
 
@@ -441,8 +441,8 @@ def optimize_sed_thresholds(args):
 
     
     # Paths
-    reference_csv_path = os.path.join(dataset_dir, 'metadata', 'strong',
-        'groundtruth_strong_label_strong_validation_set.csv')
+    valid_reference_csv_path = os.path.join(dataset_dir, 'metadata',
+           f'groundtruth_strong_label_{data_type}_set.csv')
     
     prediction_path = os.path.join(workspace, 'predictions', pre_dir,
         '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold), 
