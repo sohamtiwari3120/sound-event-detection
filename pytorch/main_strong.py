@@ -192,6 +192,7 @@ def train(args):
     else:
         model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax, classes_num, feature_type)
 
+    statistics_container = StatisticsContainer(statistics_path)
     if model_summary:
         summary(model, (time_steps, mel_bins), "cpu")
 
