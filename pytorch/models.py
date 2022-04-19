@@ -630,9 +630,9 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
 
         interpolate_ratio = 8
 
-        wavs = [wav for wav in input.squeeze(1)]
+        # wavs = [wav for wav in input.squeeze(1)]
 
-        out_s3prl = self.extractor_s3prl(wavs)['last_hidden_state']
+        # out_s3prl = self.extractor_s3prl(wavs)['last_hidden_state']
 
 
 
