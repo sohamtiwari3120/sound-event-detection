@@ -195,7 +195,7 @@ def train(args):
 
     statistics_container = StatisticsContainer(statistics_path)
     if model_summary:
-        summary(model, (time_steps, mel_bins), "cpu")
+        summary(model, (16000,), "cpu")
 
     if resume_iteration:
         resume_checkpoint_path = os.path.join(checkpoints_dir, checkpoint_name)
