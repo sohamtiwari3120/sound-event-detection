@@ -253,7 +253,7 @@ class Cnn_9layers_FrameMax(nn.Module):
         init_layer(self.fc)
 
     def forward(self, input, mixup_lambda=None):
-        """Input: (batch_size, times_steps, freq_bins)"""
+        """Input: (batch_size, time_steps, freq_bins)"""
 
         interpolate_ratio = 8
 
@@ -338,7 +338,7 @@ class Cnn_9layers_FrameAvg(nn.Module):
         init_layer(self.fc)
 
     def forward(self, input, mixup_lambda=None):
-        """Input: (batch_size, times_steps, freq_bins)"""
+        """Input: (batch_size, time_steps, freq_bins)"""
 
         interpolate_ratio = 8
 
@@ -421,7 +421,7 @@ class Cnn_9layers_FrameAtt(nn.Module):
         init_bn(self.bn0)
 
     def forward(self, input, mixup_lambda=None):
-        """Input: (batch_size, times_steps, freq_bins)"""
+        """Input: (batch_size, time_steps, freq_bins)"""
 
         interpolate_ratio = 8
 
@@ -510,7 +510,7 @@ class Cnn_9layers_Gru_FrameAvg(nn.Module):
         init_layer(self.fc)
 
     def forward(self, input, mixup_lambda=None, timeshift=False, spec_augment=True):
-        """Input: (batch_size, times_steps, freq_bins)"""
+        """Input: (batch_size, time_steps, freq_bins)"""
 
         interpolate_ratio = 8
 
@@ -626,7 +626,7 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
         init_gru(self.gru)
 
     def forward(self, input, mixup_lambda=None, timeshift=False, spec_augment=True):
-        """Input: (batch_size, times_steps, freq_bins)"""
+        """Input: (batch_size, time_steps, freq_bins)"""
 
         interpolate_ratio = 8
 
@@ -746,7 +746,7 @@ class Cnn_14layers_Gru_FrameAtt(nn.Module):
         init_gru(self.gru)
 
     def forward(self, input, mixup_lambda=None, timeshift=False, spec_augment=True):
-        """Input: (batch_size, times_steps, freq_bins)"""
+        """Input: (batch_size, time_steps, freq_bins)"""
 
         interpolate_ratio = 32
 
@@ -937,7 +937,7 @@ class Cnn_9layers_Transformer_FrameAvg(nn.Module):
         init_layer(self.fc)
 
     def forward(self, input, mixup_lambda=None, timeshift=False, spec_augment=True):
-        """Input: (batch_size, times_steps, freq_bins)"""
+        """Input: (batch_size, time_steps, freq_bins)"""
 
         interpolate_ratio = 8
 
@@ -1037,7 +1037,7 @@ class Cnn_9layers_Transformer_FrameAtt(nn.Module):
         init_bn(self.bn0)
 
     def forward(self, input, mixup_lambda=None, timeshift=False, spec_augment=True):
-        """Input: (batch_size, times_steps, freq_bins)"""
+        """Input: (batch_size, time_steps, freq_bins)"""
 
         interpolate_ratio = 8
 
@@ -1138,7 +1138,7 @@ class Cnn_14layers_Transformer_FrameAtt(nn.Module):
         init_bn(self.bn0)
 
     def forward(self, input, mixup_lambda=None, timeshift=False, spec_augment=True):
-        """Input: (batch_size, times_steps, freq_bins)"""
+        """Input: (batch_size, time_steps, freq_bins)"""
 
         interpolate_ratio = 32
 
@@ -2338,7 +2338,7 @@ class VGGish_FrameAtt(nn.Module):
         #print(self.vggish)
 
     def forward(self, input, mixup_lambda=None, timeshift=False, spec_augment=True):
-        """Input: (batch_size, times_steps, freq_bins)"""
+        """Input: (batch_size, time_steps, freq_bins)"""
 
         interpolate_ratio = 12
 
@@ -2440,7 +2440,7 @@ class VGGish_Gru_FrameAtt(nn.Module):
         #print(self.vggish)
 
     def forward(self, input, mixup_lambda=None, timeshift=False, spec_augment=True):
-        """Input: (batch_size, times_steps, freq_bins)"""
+        """Input: (batch_size, time_steps, freq_bins)"""
 
         interpolate_ratio = 12
 
@@ -2541,7 +2541,7 @@ class VGGish_FrameAvg(nn.Module):
         #print(self.vggish)
 
     def forward(self, input, mixup_lambda=None, timeshift=False, spec_augment=True):
-        """Input: (batch_size, times_steps, freq_bins)"""
+        """Input: (batch_size, time_steps, freq_bins)"""
 
         #interpolate_ratio = 12
 
@@ -2642,7 +2642,7 @@ class VGGish_FrameAvg(nn.Module):
 #        #print(self.vggish)
 #
 #    def forward(self, input, mixup_lambda=None, timeshift=False, spec_augment=True):
-#        """Input: (batch_size, times_steps, freq_bins)"""
+#        """Input: (batch_size, time_steps, freq_bins)"""
 #
 #        interpolate_ratio = 12
 #
@@ -2834,7 +2834,7 @@ class Cnn_9layers_Gru_Reg(nn.Module):
         init_gru(self.gru)
 
     def forward(self, input, mixup_lambda=None, timeshift=False):
-        """Input: (batch_size, times_steps, freq_bins)"""
+        """Input: (batch_size, time_steps, freq_bins)"""
 
         interpolate_ratio = 8
 

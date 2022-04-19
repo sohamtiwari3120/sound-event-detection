@@ -18,11 +18,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data
-
+from torchsummary import summary
 import config
 from evaluate import Evaluator
 from config import (sample_rate, classes_num, mel_bins, fmin, fmax,
-    window_size, hop_size, window, pad_mode, center, device, ref, amin, top_db)
+    window_size, hop_size, window, pad_mode, center, device, ref, amin, top_db, time_steps, mel_bins)
 from losses import get_loss_func
 from pytorch_utils import move_data_to_device, do_mixup, do_mixup_timeshift
 from utilities import (create_folder, frame_prediction_to_event_prediction_v2, frame_prediction_to_event_prediction, get_filename, create_logging, official_evaluate, frame_binary_prediction_to_event_prediction,
@@ -74,6 +74,7 @@ def train(args):
     audio_16k = args.audio_16k
     vggish = args.vggish
     fsd50k = args.fsd50k
+    model_summary = args.model_summary
     timeshift = False
     spec_augment = False
 
@@ -190,6 +191,9 @@ def train(args):
         model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax, classes_num, feature_type, vggish_path)
     else:
         model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax, classes_num, feature_type)
+
+    if model_summary:
+        summary(model, (time_steps, mel_bins), "cpu")
 
     if resume_iteration:
         resume_checkpoint_path = os.path.join(checkpoints_dir, checkpoint_name)
@@ -1300,6 +1304,7 @@ if __name__ == '__main__':
     parser_train.add_argument('--vggish', action='store_true', default=False)
     parser_train.add_argument('--fsd50k', action='store_true', default=False)
     parser_train.add_argument('--mini_data', action='store_true', default=False)
+    parser_train.add_argument('-ms', '--model_summary', action='store_true', default=False)
 
     # Inference
     parser_inference_prob = subparsers.add_parser('inference_prob')
@@ -1335,6 +1340,7 @@ if __name__ == '__main__':
     parser_inference_prob_overlap.add_argument('--audio_16k', action='store_true', default=False)
     parser_inference_prob_overlap.add_argument('--data_type', type=str, required=True)
     parser_inference_prob_overlap.add_argument('--fsd50k', action='store_true', default=False)
+    parser_inference_prob_overlap.add_argument('-ms', '--model_summary', action='store_true', default=False)
 
     # Inference (overlap + vote)
     parser_inference_prob_vote = subparsers.add_parser('inference_prob_vote')

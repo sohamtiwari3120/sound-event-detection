@@ -11,6 +11,7 @@ fmax = sample_rate/2
 window_size = 1024 * sample_rate//32000
 hop_size = 320 * sample_rate//32000
 frames_per_second = sample_rate // hop_size
+time_steps = frames_per_second * audio_duration
 window = 'hann'
 pad_mode = 'reflect'
 center = True
