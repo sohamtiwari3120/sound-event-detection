@@ -742,10 +742,11 @@ def inference_prob_overlap(self):
                        break
             else:
                 full_audio_name = audio_name
+                print(1, full_audio_name)
             try:
                 audio_duration = librosa.get_duration(filename=full_audio_name)
             except:
-                print(full_audio_name)
+                print(2, full_audio_name)
                 continue
             predict_length += audio_duration
             #print('Total audio duration: {} s'.format(audio_duration))
