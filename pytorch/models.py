@@ -15,6 +15,7 @@ from stft import Spectrogram, LogmelFilterBank, STFT, CQTFilterBank, GammaFilter
 from models_2020.baseline_model import CNN
 from models_2020.conformer.conformer_encoder import ConformerEncoder
 from models_2020.transformer.encoder import Encoder as TransformerEncoder
+from CBAM import CBAMBlock
 
 
 def init_layer(layer):
@@ -563,7 +564,7 @@ class Cnn_9layers_Gru_FrameAvg(nn.Module):
 
 class Cnn_9layers_Gru_FrameAtt(nn.Module):
     def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
-        fmax, classes_num, feature_type):
+        fmax, classes_num, feature_type, use_cbam):
 
         super(Cnn_9layers_Gru_FrameAtt, self).__init__()
 
@@ -575,6 +576,7 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
         top_db = None
         num_bins = 80
         self.feature_type = feature_type
+        self.use_cbam = use_cbam
 
         # Spectrogram extractor
         self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size,
@@ -613,7 +615,8 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
         self.conv_block2 = ConvBlock(in_channels=64, out_channels=128)
         self.conv_block3 = ConvBlock(in_channels=128, out_channels=256)
         self.conv_block4 = ConvBlock(in_channels=256, out_channels=512)
-
+        if self.use_cbam:
+            self.cbam = CBAMBlock(512, 2, 3)
         self.gru = nn.GRU(input_size=512, hidden_size=256, num_layers=1,
             bias=True, batch_first=True, bidirectional=True)
 
@@ -674,6 +677,9 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
         x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
         x = self.conv_block4(x, pool_size=(1, 1), pool_type='avg')
+        
+        if self.use_cbam:
+            x = self.cbam(x)
 
         x = torch.mean(x, dim=3)
         x = x.transpose(1, 2)   # (batch_size, time_steps, channels)
