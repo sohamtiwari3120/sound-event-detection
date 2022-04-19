@@ -75,6 +75,7 @@ def train(args):
     vggish = args.vggish
     fsd50k = args.fsd50k
     model_summary = args.model_summary
+    use_cbam = args.use_cbam
     timeshift = False
     spec_augment = False
 
@@ -151,24 +152,24 @@ def train(args):
     checkpoints_dir = os.path.join(workspace, 'checkpoints', file_header,
            '{}{}'.format(prefix, filename), 'holdout_fold={}'.format(holdout_fold),
            'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-           'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size))
+           'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}")
 
     tmp_submission_path = os.path.join(workspace, '_tmp_submission', file_header,
         '{}{}'.format(prefix, filename), 'holdout_fold={}'.format(holdout_fold),
         'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
+        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}",
         submission_name)
 
     statistics_path = os.path.join(workspace, 'statistics', file_header,
         '{}{}'.format(prefix, filename), 'holdout_fold={}'.format(holdout_fold),
         'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
+        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}",
         statistics_name)
 
     logs_dir = os.path.join(workspace, 'logs', file_header, '{}{}'.format(prefix, filename),
         'holdout_fold={}'.format(holdout_fold), 'model_type={}'.format(model_type),
         'loss_type={}'.format(loss_type), 'augmentation={}'.format(augmentation),
-        'batch_size={}'.format(batch_size))
+        'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}")
 
     create_folder(checkpoints_dir)
     create_folder(os.path.dirname(tmp_submission_path))
@@ -190,7 +191,7 @@ def train(args):
         vggish_path = os.path.join(workspace, 'checkpoints', 'vggish', 'pytorch_vggish.pth')
         model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax, classes_num, feature_type, vggish_path)
     else:
-        model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax, classes_num, feature_type)
+        model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax, classes_num, feature_type, use_cbam)
 
     statistics_container = StatisticsContainer(statistics_path)
     if model_summary:
@@ -1307,6 +1308,7 @@ if __name__ == '__main__':
     parser_train.add_argument('--fsd50k', action='store_true', default=False)
     parser_train.add_argument('--mini_data', action='store_true', default=False)
     parser_train.add_argument('-ms', '--model_summary', action='store_true', default=False)
+    parser_train.add_argument('-cbam', '--use_cbam', action='store_true', default=False)
 
     # Inference
     parser_inference_prob = subparsers.add_parser('inference_prob')
@@ -1343,6 +1345,7 @@ if __name__ == '__main__':
     parser_inference_prob_overlap.add_argument('--data_type', type=str, required=True)
     parser_inference_prob_overlap.add_argument('--fsd50k', action='store_true', default=False)
     parser_inference_prob_overlap.add_argument('-ms', '--model_summary', action='store_true', default=False)
+    parser_inference_prob_overlap.add_argument('-cbam', '--use_cbam', action='store_true', default=False)
 
     # Inference (overlap + vote)
     parser_inference_prob_vote = subparsers.add_parser('inference_prob_vote')
