@@ -477,7 +477,7 @@ def optimize_sed_thresholds(args):
 
     # Thresholds optimizer
     hyper_params_opt = HyperParamsOptimizer(score_calculator, save_dict,
-        learning_rate=1e-2, epochs=70, step=0.02, max_search=5)
+        learning_rate=1e-2, epochs=10, step=0.02, max_search=5)
 
     # Initialize thresholds
     sed_params_dict = {
