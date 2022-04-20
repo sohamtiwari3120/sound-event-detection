@@ -564,7 +564,7 @@ class Cnn_9layers_Gru_FrameAvg(nn.Module):
 
 class Cnn_9layers_Gru_FrameAtt(nn.Module):
     def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
-        fmax, classes_num, feature_type, use_cbam):
+        fmax, classes_num, feature_type, use_cbam=False):
 
         super(Cnn_9layers_Gru_FrameAtt, self).__init__()
 
