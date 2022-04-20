@@ -678,7 +678,7 @@ def inference_prob_overlap(self):
 
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model'])
-
+    print(f"Checkpoint iteration: {checkpoint['iteration']}")
     count_parameters(model)
 
     # Parallel
