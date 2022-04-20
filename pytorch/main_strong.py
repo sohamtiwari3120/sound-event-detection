@@ -693,7 +693,7 @@ def inference_prob_overlap(self):
             '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
             'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
             'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
-            'best_{}_{}.sed.valid.pkl'.format(feature_type, quality))
+            'best_{}_{}.sed.{}.pkl'.format(feature_type, quality, data_type))
         sed_params_dict = pickle.load(open(sed_thresholds_path, 'rb'))
     else:
         sed_params_dict = {
