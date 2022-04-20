@@ -593,7 +593,7 @@ def inference_prob_overlap(self):
     audio_16k = args.audio_16k
     data_type = args.data_type
     fsd50k = args.fsd50k
-
+    use_cbam = args.use_cbam
     #data_type = 'testing'
 
     num_workers = 8
@@ -674,7 +674,7 @@ def inference_prob_overlap(self):
     assert model_type, 'Please specify model_type!'
     Model = eval(model_type)
     model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
-        classes_num, feature_type)
+        classes_num, feature_type, use_cbam)
 
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model'])
