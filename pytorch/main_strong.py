@@ -57,7 +57,7 @@ def train(wandb, args):
       device: 'cuda' | 'cpu'
       mini_data: bool
     """
-    wandb.config = args
+    wandb.config.update(args)
     # Arugments & parameters
     experiment_name = args.experiment_name
     dataset_dir = args.dataset_dir
