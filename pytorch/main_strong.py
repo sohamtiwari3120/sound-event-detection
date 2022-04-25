@@ -1,46 +1,48 @@
+from models import *
+from data_generator import (AudiosetDataset, TrainSampler, TestSampler,
+                            collate_fn)
+from calculate_metrics import get_metric
+from utilities import (create_folder, frame_prediction_to_event_prediction_v2, frame_prediction_to_event_prediction, get_filename, create_logging, official_evaluate, frame_binary_prediction_to_event_prediction,
+                       StatisticsContainer, pad_truncate_sequence, write_submission, Mixup, count_parameters, merge, avg_merge, append_to_dict)
+from pytorch_utils import move_data_to_device, do_mixup, do_mixup_timeshift
+from losses import get_loss_func
+from config import (sample_rate, classes_num, mel_bins, fmin, fmax,
+                    window_size, hop_size, window, pad_mode, center, device, ref, amin, top_db, time_steps, mel_bins)
+from evaluate import Evaluator
+import config
+from torchsummary import summary
+import torch.utils.data
+import torch.optim as optim
+import torch.nn.functional as F
+import torch.nn as nn
+import torch
+import matplotlib.pyplot as plt
+from glob import glob
+import logging
+import pickle
+import time
+import math
+import wandb
+import librosa
+import argparse
+import pandas as pd
+import numpy as np
 import os
 import sys
 sys.path.insert(1, os.path.join(sys.path[0], '../utils'))
-import numpy as np
-import pandas as pd
-import argparse
-import librosa
-import h5py
-import math
-import time
-import pickle
-import logging
-from glob import glob
-import matplotlib.pyplot as plt
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-import torch.utils.data
-from torchsummary import summary
-import config
-from evaluate import Evaluator
-from config import (sample_rate, classes_num, mel_bins, fmin, fmax,
-    window_size, hop_size, window, pad_mode, center, device, ref, amin, top_db, time_steps, mel_bins)
-from losses import get_loss_func
-from pytorch_utils import move_data_to_device, do_mixup, do_mixup_timeshift
-from utilities import (create_folder, frame_prediction_to_event_prediction_v2, frame_prediction_to_event_prediction, get_filename, create_logging, official_evaluate, frame_binary_prediction_to_event_prediction,
-    StatisticsContainer, pad_truncate_sequence, write_submission, Mixup, count_parameters, merge, avg_merge, append_to_dict)
-from calculate_metrics import get_metric
-from data_generator import (AudiosetDataset, TrainSampler, TestSampler,
-    collate_fn)
-from models import *
 
 def cycle_iteration(iterable):
     while True:
         for i in iterable:
             yield i
 
-def train(args):
+
+def train(wandb, args):
     """Train and evaluate.
 
     Args:
+      wandb: weights and biases logger
       dataset_dir: str
       workspace: str
       holdout_fold: '1'
@@ -54,7 +56,7 @@ def train(args):
       device: 'cuda' | 'cpu'
       mini_data: bool
     """
-
+    wandb.config = args
     # Arugments & parameters
     dataset_dir = args.dataset_dir
     workspace = args.workspace
@@ -117,23 +119,23 @@ def train(args):
     prefix = ''
 
     strong_train_hdf5_path = os.path.join(workspace, 'hdf5s',
-    'train_{}_{}_st.h5'.format(feature_type, quality))
+                                          'train_{}_{}_st.h5'.format(feature_type, quality))
 
     strong_valid_hdf5_path = os.path.join(workspace, 'hdf5s',
-    'eval_{}_{}_st.h5'.format(feature_type, quality))
+                                          'eval_{}_{}_st.h5'.format(feature_type, quality))
 
     # test_hdf5_path = os.path.join(workspace, 'hdf5s',
     #     '{}testing_{}_{}.h5'.format(feature_type, quality))
 
     # Groundtruth file paths
     strong_train_reference_csv_path = os.path.join(dataset_dir, 'metadata',
-    'groundtruth_strong_label_train_set.csv')
+                                                   'groundtruth_strong_label_train_set.csv')
 
     strong_valid_reference_csv_path = os.path.join(dataset_dir, 'metadata',
-    'groundtruth_strong_label_eval_set.csv')
+                                                   'groundtruth_strong_label_eval_set.csv')
 
     test_reference_csv_path = os.path.join(dataset_dir, 'metadata',
-        'groundtruth_strong_label_testing_set.csv')
+                                           'groundtruth_strong_label_testing_set.csv')
 
 #    if vggish:
 #        quality = 'vggish'
@@ -150,26 +152,36 @@ def train(args):
 
     # Create the relevant directories
     checkpoints_dir = os.path.join(workspace, 'checkpoints', file_header,
-           '{}{}'.format(prefix, filename), 'holdout_fold={}'.format(holdout_fold),
-           'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-           'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}")
+                                   '{}{}'.format(prefix, filename), 'holdout_fold={}'.format(
+                                       holdout_fold),
+                                   'model_type={}'.format(
+                                       model_type), 'loss_type={}'.format(loss_type),
+                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}")
 
     tmp_submission_path = os.path.join(workspace, '_tmp_submission', file_header,
-        '{}{}'.format(prefix, filename), 'holdout_fold={}'.format(holdout_fold),
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}",
-        submission_name)
+                                       '{}{}'.format(prefix, filename), 'holdout_fold={}'.format(
+                                           holdout_fold),
+                                       'model_type={}'.format(
+                                           model_type), 'loss_type={}'.format(loss_type),
+                                       'augmentation={}'.format(augmentation), 'batch_size={}'.format(
+                                           batch_size), f"use_cbam={use_cbam}",
+                                       submission_name)
 
     statistics_path = os.path.join(workspace, 'statistics', file_header,
-        '{}{}'.format(prefix, filename), 'holdout_fold={}'.format(holdout_fold),
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}",
-        statistics_name)
+                                   '{}{}'.format(prefix, filename), 'holdout_fold={}'.format(
+                                       holdout_fold),
+                                   'model_type={}'.format(
+                                       model_type), 'loss_type={}'.format(loss_type),
+                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(
+                                       batch_size), f"use_cbam={use_cbam}",
+                                   statistics_name)
 
     logs_dir = os.path.join(workspace, 'logs', file_header, '{}{}'.format(prefix, filename),
-        'holdout_fold={}'.format(holdout_fold), 'model_type={}'.format(model_type),
-        'loss_type={}'.format(loss_type), 'augmentation={}'.format(augmentation),
-        'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}")
+                            'holdout_fold={}'.format(
+                                holdout_fold), 'model_type={}'.format(model_type),
+                            'loss_type={}'.format(
+                                loss_type), 'augmentation={}'.format(augmentation),
+                            'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}")
 
     create_folder(checkpoints_dir)
     create_folder(os.path.dirname(tmp_submission_path))
@@ -188,10 +200,13 @@ def train(args):
     assert model_type, 'Please specify model_type!'
     Model = eval(model_type)
     if vggish:
-        vggish_path = os.path.join(workspace, 'checkpoints', 'vggish', 'pytorch_vggish.pth')
-        model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax, classes_num, feature_type, vggish_path)
+        vggish_path = os.path.join(
+            workspace, 'checkpoints', 'vggish', 'pytorch_vggish.pth')
+        model = Model(sample_rate, window_size, hop_size, mel_bins,
+                      fmin, fmax, classes_num, feature_type, vggish_path)
     else:
-        model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax, classes_num, feature_type, use_cbam)
+        model = Model(sample_rate, window_size, hop_size, mel_bins,
+                      fmin, fmax, classes_num, feature_type, use_cbam)
 
     statistics_container = StatisticsContainer(statistics_path)
     if model_summary:
@@ -199,7 +214,8 @@ def train(args):
 
     if resume_iteration:
         resume_checkpoint_path = os.path.join(checkpoints_dir, checkpoint_name)
-        logging.info('Load resume model from {}'.format(resume_checkpoint_path))
+        logging.info('Load resume model from {}'.format(
+            resume_checkpoint_path))
         resume_checkpoint = torch.load(resume_checkpoint_path)
         model.load_state_dict(resume_checkpoint['model'])
         statistics_container.load_state_dict(resume_iteration)
@@ -216,7 +232,7 @@ def train(args):
 
     # Optimizer
     optimizer = optim.Adam(model.parameters(), lr=learning_rate,
-        betas=(0.9, 0.999), eps=1e-08, weight_decay=0., amsgrad=True)
+                           betas=(0.9, 0.999), eps=1e-08, weight_decay=0., amsgrad=True)
 
     # Dataset
     dataset = AudiosetDataset()
@@ -230,7 +246,8 @@ def train(args):
         hdf5_path=strong_train_hdf5_path,
         batch_size=batch_size * 2 if 'mixup' in augmentation else batch_size)
 
-    strong_valid_sampler = TestSampler(hdf5_path=strong_valid_hdf5_path, batch_size=batch_size)
+    strong_valid_sampler = TestSampler(
+        hdf5_path=strong_valid_hdf5_path, batch_size=batch_size)
 
     # test_sampler = TestSampler(hdf5_path=test_hdf5_path, batch_size=batch_size)
 
@@ -240,12 +257,12 @@ def train(args):
     #     num_workers=num_workers, pin_memory=True)
 
     strong_train_loader = torch.utils.data.DataLoader(dataset=dataset,
-        batch_sampler=strong_train_sampler, collate_fn=collate_fn,
-        num_workers=num_workers, pin_memory=True)
+                                                      batch_sampler=strong_train_sampler, collate_fn=collate_fn,
+                                                      num_workers=num_workers, pin_memory=True)
 
     strong_valid_loader = torch.utils.data.DataLoader(dataset=dataset,
-        batch_sampler=strong_valid_sampler, collate_fn=collate_fn,
-        num_workers=num_workers, pin_memory=True)
+                                                      batch_sampler=strong_valid_sampler, collate_fn=collate_fn,
+                                                      num_workers=num_workers, pin_memory=True)
 
     # test_loader = torch.utils.data.DataLoader(dataset=dataset,
     #     batch_sampler=test_sampler, collate_fn=collate_fn,
@@ -280,32 +297,41 @@ def train(args):
     # Load samples
     while iteration != stop_iteration:
         # Evaluate
-        if (iteration % 1000 == 0 and iteration > resume_iteration):# or (iteration == 0):
+        # or (iteration == 0):
+        if (iteration % 1000 == 0 and iteration > resume_iteration):
 
             logging.info('------------------------------------')
             logging.info('Iteration: {}'.format(iteration))
 
             train_fin_time = time.time()
 
-            for (data_type, data_loader, reference_csv_path) in [('eval', strong_valid_loader, strong_valid_reference_csv_path), 
-            # ('test', test_loader, test_reference_csv_path)
-            ]:
+            for (data_type, data_loader, reference_csv_path) in [('eval', strong_valid_loader, strong_valid_reference_csv_path),
+                                                                 # ('test', test_loader, test_reference_csv_path)
+                                                                 ]:
 
                 # Calculate tatistics
                 (statistics, _) = evaluator.evaluate(
                     data_loader, reference_csv_path, tmp_submission_path, frames_per_second)
 
                 logging.info('{} statistics:'.format(data_type))
-                logging.info('    Clipwise mAP: {:.3f}'.format(np.nanmean(statistics['clipwise_ap'])))
-                logging.info('    Framewise mAP: {:.3f}'.format(np.nanmean(statistics['framewise_ap'])))
-                logging.info('    {}'.format(statistics['sed_metrics']['overall']['error_rate']))
-
+                logging.info('    Clipwise mAP: {:.3f}'.format(
+                    np.nanmean(statistics['clipwise_ap'])))
+                logging.info('    Framewise mAP: {:.3f}'.format(
+                    np.nanmean(statistics['framewise_ap'])))
+                logging.info('    {}'.format(
+                    statistics['sed_metrics']['overall']['error_rate']))
+                wandb.log({
+                    "Clipwise mAP": np.nanmean(statistics['clipwise_ap']),
+                    "Framewise mAP": np.nanmean(statistics['framewise_ap']),
+                    "sed_metrics-overall-error_rate": statistics['sed_metrics']['overall']['error_rate']
+                })
                 statistics_container.append(data_type, iteration, statistics)
 
                 if data_type == 'eval':
                     if np.nanmean(statistics['framewise_ap']) >= best_framewise_map and statistics['sed_metrics']['overall']['error_rate']['error_rate'] < best_error_rate <= best_error_rate:
 
-                        best_framewise_map = np.nanmean(statistics['framewise_ap'])
+                        best_framewise_map = np.nanmean(
+                            statistics['framewise_ap'])
                         best_error_rate = statistics['sed_metrics']['overall']['error_rate']['error_rate']
                         best_iteration = iteration
 
@@ -314,10 +340,12 @@ def train(args):
                             'model': model.module.state_dict(),
                             'optimizer': optimizer.state_dict()}
 
-                        checkpoint_path = os.path.join(checkpoints_dir, checkpoint_name)
+                        checkpoint_path = os.path.join(
+                            checkpoints_dir, checkpoint_name)
 
                         torch.save(checkpoint, checkpoint_path)
-                        logging.info('Model saved to {} for iteration {}'.format(checkpoint_path, iteration))
+                        logging.info('Model saved to {} for iteration {}'.format(
+                            checkpoint_path, iteration))
 
             statistics_container.dump()
 
@@ -344,7 +372,8 @@ def train(args):
         # for key in weak_batch_data_dict.keys():
         #     weak_batch_data_dict[key] = move_data_to_device(weak_batch_data_dict[key], device)
         for key in strong_batch_data_dict.keys():
-            strong_batch_data_dict[key] = move_data_to_device(strong_batch_data_dict[key], device)
+            strong_batch_data_dict[key] = move_data_to_device(
+                strong_batch_data_dict[key], device)
 
         # Train
         model.train()
@@ -352,18 +381,23 @@ def train(args):
         if 'mixup' in augmentation:
             # weak_batch_output_dict = model(weak_batch_data_dict['waveform'], weak_batch_data_dict['mixup_lambda'], timeshift=timeshift, spec_augment=spec_augment)
             # weak_batch_target_dict = {'target': do_mixup(weak_batch_data_dict['target'], weak_batch_data_dict['mixup_lambda'])}
-            strong_batch_output_dict = model(strong_batch_data_dict['waveform'], strong_batch_data_dict['mixup_lambda'], timeshift=timeshift, spec_augment=spec_augment)
-            strong_batch_target_dict = {'strong_target': do_mixup(strong_batch_data_dict['strong_target'], strong_batch_data_dict['mixup_lambda'])}
+            strong_batch_output_dict = model(
+                strong_batch_data_dict['waveform'], strong_batch_data_dict['mixup_lambda'], timeshift=timeshift, spec_augment=spec_augment)
+            strong_batch_target_dict = {'strong_target': do_mixup(
+                strong_batch_data_dict['strong_target'], strong_batch_data_dict['mixup_lambda'])}
 
         else:
             # weak_batch_output_dict = model(weak_batch_data_dict['waveform'], None, timeshift=timeshift, spec_augment=spec_augment)
             # weak_batch_target_dict = {'target': weak_batch_data_dict['target']}
-            strong_batch_output_dict = model(strong_batch_data_dict['waveform'], None, timeshift=timeshift, spec_augment=spec_augment)
-            strong_batch_target_dict = {'strong_target': strong_batch_data_dict['strong_target']}
+            strong_batch_output_dict = model(
+                strong_batch_data_dict['waveform'], None, timeshift=timeshift, spec_augment=spec_augment)
+            strong_batch_target_dict = {
+                'strong_target': strong_batch_data_dict['strong_target']}
 
         # loss
         # weak_loss = weak_loss_func(weak_batch_output_dict, weak_batch_target_dict)
-        strong_loss = strong_loss_func(strong_batch_output_dict, strong_batch_target_dict)
+        strong_loss = strong_loss_func(
+            strong_batch_output_dict, strong_batch_target_dict)
 
         loss = strong_loss
         print('{} iteration - strong: {}, total: {}'.format(iteration, strong_loss, loss))
@@ -445,7 +479,8 @@ def inference_prob(self):
     frames_per_second = sample_rate // hop_size
 
     # Paths
-    test_hdf5_path = os.path.join(workspace, 'hdf5s', '{}_{}_{}.h5'.format(data_type, feature_type, quality))
+    test_hdf5_path = os.path.join(
+        workspace, 'hdf5s', '{}_{}_{}.h5'.format(data_type, feature_type, quality))
 
     checkpoint_name = 'best_{}_{}.pth'.format(feature_type, quality)
     submission_name = '_submission_{}_{}.csv'.format(feature_type, quality)
@@ -456,33 +491,44 @@ def inference_prob(self):
         pre_dir = ''
 
     test_reference_csv_path = os.path.join(dataset_dir, 'metadata',
-        'groundtruth_strong_label_{}_set.csv'.format(data_type))
+                                           'groundtruth_strong_label_{}_set.csv'.format(data_type))
 
     checkpoint_path = os.path.join(workspace, 'checkpoints', pre_dir,
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
-        checkpoint_name)
+                                   '{}'.format(filename), 'holdout_fold={}'.format(
+                                       holdout_fold),
+                                   'model_type={}'.format(
+                                       model_type), 'loss_type={}'.format(loss_type),
+                                   'augmentation={}'.format(
+                                       augmentation), 'batch_size={}'.format(batch_size),
+                                   checkpoint_name)
 
     predictions_dir = os.path.join(workspace, 'predictions', pre_dir,
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size))
+                                   '{}'.format(filename), 'holdout_fold={}'.format(
+                                       holdout_fold),
+                                   'model_type={}'.format(
+                                       model_type), 'loss_type={}'.format(loss_type),
+                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size))
     create_folder(predictions_dir)
 
     tmp_submission_path = os.path.join(workspace, '_tmp_submission', pre_dir,
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
-        submission_name)
+                                       '{}'.format(filename), 'holdout_fold={}'.format(
+                                           holdout_fold),
+                                       'model_type={}'.format(
+                                           model_type), 'loss_type={}'.format(loss_type),
+                                       'augmentation={}'.format(
+                                           augmentation), 'batch_size={}'.format(batch_size),
+                                       submission_name)
     create_folder(os.path.dirname(tmp_submission_path))
 
     if sed_thresholds:
         sed_thresholds_path = os.path.join(workspace, 'opt_thresholds', pre_dir,
-            '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-            'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-            'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
-            'best_{}_{}.sed.valid.pkl'.format(feature_type, quality))
+                                           '{}'.format(filename), 'holdout_fold={}'.format(
+                                               holdout_fold),
+                                           'model_type={}'.format(
+                                               model_type), 'loss_type={}'.format(loss_type),
+                                           'augmentation={}'.format(
+                                               augmentation), 'batch_size={}'.format(batch_size),
+                                           'best_{}_{}.sed.valid.pkl'.format(feature_type, quality))
         sed_params_dict = pickle.load(open(sed_thresholds_path, 'rb'))
     else:
         sed_params_dict = {
@@ -496,10 +542,13 @@ def inference_prob(self):
     assert model_type, 'Please specify model_type!'
     Model = eval(model_type)
     if vggish:
-        vggish_path = os.path.join(workspace, 'checkpoints', 'vggish', 'pytorch_vggish.pth')
-        model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax, classes_num, feature_type, vggish_path)
+        vggish_path = os.path.join(
+            workspace, 'checkpoints', 'vggish', 'pytorch_vggish.pth')
+        model = Model(sample_rate, window_size, hop_size, mel_bins,
+                      fmin, fmax, classes_num, feature_type, vggish_path)
     else:
-        model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax, classes_num, feature_type)
+        model = Model(sample_rate, window_size, hop_size,
+                      mel_bins, fmin, fmax, classes_num, feature_type)
 
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model'])
@@ -521,14 +570,14 @@ def inference_prob(self):
 
     # Data loader
     test_loader = torch.utils.data.DataLoader(dataset=dataset,
-        batch_sampler=test_sampler, collate_fn=collate_fn,
-        num_workers=num_workers, pin_memory=True)
+                                              batch_sampler=test_sampler, collate_fn=collate_fn,
+                                              num_workers=num_workers, pin_memory=True)
 
     # Evaluator
     evaluator = Evaluator(model=model)
 
     for (data_type, data_loader, reference_csv_path) in [
-        ('test', test_loader, test_reference_csv_path)]:
+            ('test', test_loader, test_reference_csv_path)]:
 
         start_time = time.time()
         print('Inferencing {} data in about 1 min ...'.format(data_type))
@@ -537,11 +586,9 @@ def inference_prob(self):
             data_loader, reference_csv_path, tmp_submission_path, frames_per_second)
 
         predict_event_list = frame_prediction_to_event_prediction(output_dict,
-        sed_params_dict, frames_per_second)
+                                                                  sed_params_dict, frames_per_second)
 
         end_time = time.time()
-
-
 
         # Write predicted events to submission file
         write_submission(predict_event_list, tmp_submission_path)
@@ -598,19 +645,6 @@ def inference_prob_overlap(self):
 
     num_workers = 8
 
-    # Paths
-
-#    if feature_type == 'logmel' and not audio_8k and not audio_16k:
-#        test_hdf5_path = os.path.join(workspace, 'hdf5s', '{}.h5'.format(data_type))
-#    elif feature_type == 'logmel' and audio_8k:
-#        test_hdf5_path = os.path.join(workspace, 'hdf5s', '{}_8k.h5'.format(data_type))
-#    elif feature_type == 'logmel' and audio_16k:
-#        test_hdf5_path = os.path.join(workspace, 'hdf5s', '{}_16k.h5'.format(data_type))
-#    elif feature_type == 'gamma':
-#        test_hdf5_path = os.path.join(workspace, 'hdf5s', '{}_{}.h5'.format(data_type, feature_type))
-
-    #test_reference_csv_path = os.path.join(dataset_dir, 'metadata', 'groundtruth_strong_label_testing_set.csv')
-
     if audio_8k:
         quality = '8k'
         sample_rate = 8000
@@ -641,7 +675,8 @@ def inference_prob_overlap(self):
 
     checkpoint_name = 'best_{}_{}.pth'.format(feature_type, quality)
     tmp_submission_name = '_overlap_submission_{}.csv'.format(quality)
-    test_hdf5_path = os.path.join(workspace, 'hdf5s', '{}_{}_{}.h5'.format(data_type, feature_type, quality))
+    test_hdf5_path = os.path.join(
+        workspace, 'hdf5s', '{}_{}_{}.h5'.format(data_type, feature_type, quality))
 
     if fsd50k:
         pre_dir = 'fsd50k'
@@ -649,23 +684,32 @@ def inference_prob_overlap(self):
         pre_dir = ''
 
     checkpoint_path = os.path.join(workspace, 'checkpoints', pre_dir,
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
-        checkpoint_name)
+                                   '{}'.format(filename), 'holdout_fold={}'.format(
+                                       holdout_fold),
+                                   'model_type={}'.format(
+                                       model_type), 'loss_type={}'.format(loss_type),
+                                   'augmentation={}'.format(
+                                       augmentation), 'batch_size={}'.format(batch_size),
+                                   checkpoint_name)
 
     predictions_dir = os.path.join(workspace, 'predictions', pre_dir,
-    '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-    'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-    'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size))
+                                   '{}'.format(filename), 'holdout_fold={}'.format(
+                                       holdout_fold),
+                                   'model_type={}'.format(
+                                       model_type), 'loss_type={}'.format(loss_type),
+                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size))
 
     tmp_submission_path = os.path.join(workspace, '_tmp_submission', pre_dir,
-    '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-    'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-    'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
-    tmp_submission_name)
+                                       '{}'.format(filename), 'holdout_fold={}'.format(
+                                           holdout_fold),
+                                       'model_type={}'.format(
+                                           model_type), 'loss_type={}'.format(loss_type),
+                                       'augmentation={}'.format(
+                                           augmentation), 'batch_size={}'.format(batch_size),
+                                       tmp_submission_name)
 
-    reference_csv_path = os.path.join(dataset_dir, 'metadata', 'groundtruth_strong_label_{}_set.csv'.format(data_type))
+    reference_csv_path = os.path.join(
+        dataset_dir, 'metadata', 'groundtruth_strong_label_{}_set.csv'.format(data_type))
 
     create_folder(predictions_dir)
     create_folder(os.path.dirname(tmp_submission_path))
@@ -674,7 +718,7 @@ def inference_prob_overlap(self):
     assert model_type, 'Please specify model_type!'
     Model = eval(model_type)
     model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
-        classes_num, feature_type, use_cbam)
+                  classes_num, feature_type, use_cbam)
 
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model'])
@@ -690,10 +734,13 @@ def inference_prob_overlap(self):
 
     if sed_thresholds:
         sed_thresholds_path = os.path.join(workspace, 'opt_thresholds', pre_dir,
-            '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-            'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-            'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
-            'best_{}_{}.sed.{}.pkl'.format(feature_type, quality, data_type))
+                                           '{}'.format(filename), 'holdout_fold={}'.format(
+                                               holdout_fold),
+                                           'model_type={}'.format(
+                                               model_type), 'loss_type={}'.format(loss_type),
+                                           'augmentation={}'.format(
+                                               augmentation), 'batch_size={}'.format(batch_size),
+                                           'best_{}_{}.sed.{}.pkl'.format(feature_type, quality, data_type))
         sed_params_dict = pickle.load(open(sed_thresholds_path, 'rb'))
     else:
         sed_params_dict = {
@@ -703,16 +750,7 @@ def inference_prob_overlap(self):
             'n_smooth': 10,
             'n_salt': 10}
 
-#    overlap_values = np.arange(0.5,2,0.5)
-#    segment_lengths = np.arange(2,10,0.5)
-#
-#    param_combinations = []
-#    for value in overlap_values:
-#        for length in segment_lengths:
-#            param_combinations.append([value, length])
-
-    param_combinations = [[0.5,6], [0.5,7], [1,5], [1,6], [1,7]]
-    #param_combinations = [[1,5]]
+    param_combinations = [[0.5, 6], [0.5, 7], [1, 5], [1, 6], [1, 7]]
 
     if audio_8k:
         audios_dir = os.path.join(dataset_dir, data_type, '8k')
@@ -726,7 +764,7 @@ def inference_prob_overlap(self):
     #audio_files = sorted(glob('{}/*.wav'.format(audios_dir)))
     audios_num = len(audio_files)
     print('NUMBER OF AUDIO FILES:', audios_num)
-    audio_samples = sample_rate * 10 #sample_duration
+    audio_samples = sample_rate * 10  # sample_duration
     for param in param_combinations:
         overlap_value = param[0]
         sample_duration = param[1]
@@ -737,10 +775,10 @@ def inference_prob_overlap(self):
             audio_name = audio_files[n]
             #print('Predicting on {}'.format(audio_name))
             if audio_8k:
-               for filename in full_audio_files:
-                   if audio_name.split('/')[-1].split('.wav')[0] in filename:
-                       full_audio_name = filename
-                       break
+                for filename in full_audio_files:
+                    if audio_name.split('/')[-1].split('.wav')[0] in filename:
+                        full_audio_name = filename
+                        break
             else:
                 full_audio_name = audio_name
                 print(1, full_audio_name)
@@ -757,14 +795,15 @@ def inference_prob_overlap(self):
             end = 0
             merged = None
             try:
-                (audio_full, fs) = librosa.core.load(full_audio_name, sr=sample_rate, mono=True)
+                (audio_full, fs) = librosa.core.load(
+                    full_audio_name, sr=sample_rate, mono=True)
             except ValueError:
                 print(full_audio_name)
             audio_full = pad_truncate_sequence(audio_full, audio_samples)
             while end <= audio_duration:
                 # Load audio sample
-    #            (audio, fs) = librosa.core.load(audio_name, sr=sample_rate, offset=start, duration=sample_duration, mono=True)
-    #            audio = pad_truncate_sequence(audio, audio_samples)
+                #            (audio, fs) = librosa.core.load(audio_name, sr=sample_rate, offset=start, duration=sample_duration, mono=True)
+                #            audio = pad_truncate_sequence(audio, audio_samples)
                 start_index = int(start * sample_rate)
                 end_index = int((sample_duration * sample_rate) + start_index)
                 audio = audio_full[start_index:end_index]
@@ -779,18 +818,20 @@ def inference_prob_overlap(self):
 
                 append_to_dict(output_dict, 'audio_name', audio_name)
                 append_to_dict(output_dict, 'clipwise_output',
-                    batch_output['clipwise_output'].data.cpu().numpy())
+                               batch_output['clipwise_output'].data.cpu().numpy())
 
                 if 'framewise_output' in batch_output.keys():
                     append_to_dict(output_dict, 'framewise_output',
-                        batch_output['framewise_output'].data.cpu().numpy())
+                                   batch_output['framewise_output'].data.cpu().numpy())
 
                 curr_clipwise = output_dict['clipwise_output']
                 curr_preds = output_dict['framewise_output']
                 if num_segment == 2:
-                    merged = merge(prev_preds, curr_preds, sample_duration, num_segment, overlap_value)
+                    merged = merge(prev_preds, curr_preds,
+                                   sample_duration, num_segment, overlap_value)
                 elif num_segment > 2:
-                    merged = merge(merged, curr_preds, sample_duration, num_segment, overlap_value)
+                    merged = merge(merged, curr_preds,
+                                   sample_duration, num_segment, overlap_value)
                 else:
                     merged = curr_preds
     #            predict_event_list = frame_prediction_to_event_prediction(output_dict,
@@ -803,11 +844,12 @@ def inference_prob_overlap(self):
                 end = start + sample_duration
                 num_segment += 1
             merged = avg_merge(merged, sample_duration, overlap_value)
-            #np.set_printoptions(threshold=sys.maxsize)
-            predict_event_list = frame_prediction_to_event_prediction_v2(merged, audio_name.split('/')[-1], sed_params_dict, frames_per_second)
+            # np.set_printoptions(threshold=sys.maxsize)
+            predict_event_list = frame_prediction_to_event_prediction_v2(
+                merged, audio_name.split('/')[-1], sed_params_dict, frames_per_second)
             full_predict_event_list.extend(predict_event_list)
 
-        #print(full_predict_event_list)
+        # print(full_predict_event_list)
         end_time = time.time()
         time_taken = end_time - start_time
         print('Processing time for {}: {} s'.format(param, time_taken))
@@ -830,7 +872,7 @@ def inference_prob_overlap(self):
         print('Micro ER: {:.3f} \n'.format(sed_er))
 
 
-#def binarize_pred(pred, sed_thresholds):
+# def binarize_pred(pred, sed_thresholds):
 #    pred_binary = np.zeros(pred.shape)
 #    for i in range(len(pred)):
 #        for j in range(len(pred[i])):
@@ -854,6 +896,7 @@ def binarize_pred(pred, sed_high_threshold, sed_thresholds=False):
                         pred_binary[i][j][k] = 1
 
     return pred_binary
+
 
 def inference_prob_vote(self):
     """Inference test and evaluate data and dump predicted probabilites to
@@ -919,7 +962,8 @@ def inference_prob_vote(self):
     audio_samples = sample_rate * 10
     checkpoint_name = 'best_{}_{}.pth'.format(feature_type, quality)
     tmp_submission_name = '_overlap_submission_{}.csv'.format(quality)
-    test_hdf5_path = os.path.join(workspace, 'hdf5s', '{}_{}_{}.h5'.format(data_type, feature_type, quality))
+    test_hdf5_path = os.path.join(
+        workspace, 'hdf5s', '{}_{}_{}.h5'.format(data_type, feature_type, quality))
 
     if fsd50k:
         pre_dir = 'fsd50k'
@@ -927,23 +971,32 @@ def inference_prob_vote(self):
         pre_dir = ''
 
     checkpoint_path = os.path.join(workspace, 'checkpoints', pre_dir,
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
-        checkpoint_name)
+                                   '{}'.format(filename), 'holdout_fold={}'.format(
+                                       holdout_fold),
+                                   'model_type={}'.format(
+                                       model_type), 'loss_type={}'.format(loss_type),
+                                   'augmentation={}'.format(
+                                       augmentation), 'batch_size={}'.format(batch_size),
+                                   checkpoint_name)
 
     predictions_dir = os.path.join(workspace, 'predictions', pre_dir,
-    '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-    'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-    'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size))
+                                   '{}'.format(filename), 'holdout_fold={}'.format(
+                                       holdout_fold),
+                                   'model_type={}'.format(
+                                       model_type), 'loss_type={}'.format(loss_type),
+                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size))
 
     tmp_submission_path = os.path.join(workspace, '_tmp_submission', pre_dir,
-    '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-    'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-    'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
-    tmp_submission_name)
+                                       '{}'.format(filename), 'holdout_fold={}'.format(
+                                           holdout_fold),
+                                       'model_type={}'.format(
+                                           model_type), 'loss_type={}'.format(loss_type),
+                                       'augmentation={}'.format(
+                                           augmentation), 'batch_size={}'.format(batch_size),
+                                       tmp_submission_name)
 
-    reference_csv_path = os.path.join(dataset_dir, 'metadata', 'groundtruth_strong_label_{}_set.csv'.format(data_type))
+    reference_csv_path = os.path.join(
+        dataset_dir, 'metadata', 'groundtruth_strong_label_{}_set.csv'.format(data_type))
 
     create_folder(predictions_dir)
     create_folder(os.path.dirname(tmp_submission_path))
@@ -952,7 +1005,7 @@ def inference_prob_vote(self):
     assert model_type, 'Please specify model_type!'
     Model = eval(model_type)
     model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
-        classes_num, feature_type)
+                  classes_num, feature_type)
 
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model'])
@@ -968,10 +1021,13 @@ def inference_prob_vote(self):
 
     if sed_thresholds:
         sed_thresholds_path = os.path.join(workspace, 'opt_thresholds',
-            '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-            'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-            'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
-            'best_{}_{}.sed.valid.pkl'.format(feature_type, quality))
+                                           '{}'.format(filename), 'holdout_fold={}'.format(
+                                               holdout_fold),
+                                           'model_type={}'.format(
+                                               model_type), 'loss_type={}'.format(loss_type),
+                                           'augmentation={}'.format(
+                                               augmentation), 'batch_size={}'.format(batch_size),
+                                           'best_{}_{}.sed.valid.pkl'.format(feature_type, quality))
         sed_params_dict = pickle.load(open(sed_thresholds_path, 'rb'))
     else:
         sed_params_dict = {
@@ -981,7 +1037,7 @@ def inference_prob_vote(self):
             'n_smooth': 10,
             'n_salt': 10}
 
-    param_combinations = [[0.5,6], [0.5,7], [1,5], [1,6], [1,7]]
+    param_combinations = [[0.5, 6], [0.5, 7], [1, 5], [1, 6], [1, 7]]
     #param_combinations = [[1,5]]
 
     if audio_8k:
@@ -997,7 +1053,7 @@ def inference_prob_vote(self):
     #audio_files = sorted(glob('{}/*.wav'.format(audios_dir)))
     audios_num = len(audio_files)
     print('NUMBER OF AUDIO FILES:', audios_num)
-    audio_samples = sample_rate * 10 #sample_duration
+    audio_samples = sample_rate * 10  # sample_duration
     for param in param_combinations:
         overlap_value = param[0]
         sample_duration = param[1]
@@ -1007,10 +1063,10 @@ def inference_prob_vote(self):
         for n in range(audios_num):
             audio_name = audio_files[n]
             if audio_8k:
-               for filename in full_audio_files:
-                   if audio_name.split('/')[-1].split('.wav')[0] in filename:
-                       full_audio_name = filename
-                       break
+                for filename in full_audio_files:
+                    if audio_name.split('/')[-1].split('.wav')[0] in filename:
+                        full_audio_name = filename
+                        break
             else:
                 full_audio_name = audio_name
 
@@ -1023,7 +1079,8 @@ def inference_prob_vote(self):
             merged = None
             # Load audio sample
             try:
-                (audio_full, fs) = librosa.core.load(full_audio_name, sr=sample_rate, mono=True)
+                (audio_full, fs) = librosa.core.load(
+                    full_audio_name, sr=sample_rate, mono=True)
             except ValueError:
                 print(full_audio_name)
 
@@ -1043,36 +1100,41 @@ def inference_prob_vote(self):
 
                 append_to_dict(output_dict, 'audio_name', audio_name)
                 append_to_dict(output_dict, 'clipwise_output',
-                    batch_output['clipwise_output'].data.cpu().numpy())
+                               batch_output['clipwise_output'].data.cpu().numpy())
 
                 if 'framewise_output' in batch_output.keys():
                     append_to_dict(output_dict, 'framewise_output',
-                        batch_output['framewise_output'].data.cpu().numpy())
+                                   batch_output['framewise_output'].data.cpu().numpy())
 
                 curr_clipwise = output_dict['clipwise_output']
                 curr_preds = output_dict['framewise_output']
 
-                curr_preds = binarize_pred(curr_preds, sed_params_dict['sed_low_threshold'], sed_thresholds)
+                curr_preds = binarize_pred(
+                    curr_preds, sed_params_dict['sed_low_threshold'], sed_thresholds)
                 if num_segment == 2:
-                    merged = merge(prev_preds, curr_preds, sample_duration, num_segment, overlap_value)
+                    merged = merge(prev_preds, curr_preds,
+                                   sample_duration, num_segment, overlap_value)
                 elif num_segment > 2:
-                    merged = merge(merged, curr_preds, sample_duration, num_segment, overlap_value)
+                    merged = merge(merged, curr_preds,
+                                   sample_duration, num_segment, overlap_value)
                 else:
                     merged = curr_preds
                 prev_clipwise = output_dict['clipwise_output']
                 prev_preds = output_dict['framewise_output']
-                prev_preds = binarize_pred(prev_preds, sed_params_dict['sed_low_threshold'], sed_thresholds)
+                prev_preds = binarize_pred(
+                    prev_preds, sed_params_dict['sed_low_threshold'], sed_thresholds)
 
                 #start += 1
                 start += overlap_value
                 end = start + sample_duration
                 num_segment += 1
             #merged = avg_merge(merged, sample_duration, overlap_value)
-            #np.set_printoptions(threshold=sys.maxsize)
-            predict_event_list = frame_binary_prediction_to_event_prediction(merged, overlap_value, sample_duration, audio_name.split('/')[-1], sed_params_dict)
+            # np.set_printoptions(threshold=sys.maxsize)
+            predict_event_list = frame_binary_prediction_to_event_prediction(
+                merged, overlap_value, sample_duration, audio_name.split('/')[-1], sed_params_dict)
             full_predict_event_list.extend(predict_event_list)
 
-        #print(full_predict_event_list)
+        # print(full_predict_event_list)
         end_time = time.time()
         time_taken = end_time - start_time
         print('Processing time for {}: {} s'.format(param, time_taken))
@@ -1095,7 +1157,7 @@ def inference_prob_vote(self):
         print('Micro ER: {:.3f} \n'.format(sed_er))
 
 
-#def inference_prob_vote(self):
+# def inference_prob_vote(self):
 #    """Inference test and evaluate data and dump predicted probabilites to
 #    pickle files.
 #
@@ -1290,12 +1352,16 @@ if __name__ == '__main__':
 
     # Train
     parser_train = subparsers.add_parser('train')
-    parser_train.add_argument('--dataset_dir', type=str, required=True, help='Directory of dataset.')
-    parser_train.add_argument('--workspace', type=str, required=True, help='Directory of your workspace.')
-    parser_train.add_argument('--holdout_fold', type=str, choices=['1'], required=True)
+    parser_train.add_argument(
+        '--dataset_dir', type=str, required=True, help='Directory of dataset.')
+    parser_train.add_argument(
+        '--workspace', type=str, required=True, help='Directory of your workspace.')
+    parser_train.add_argument(
+        '--holdout_fold', type=str, choices=['1'], required=True)
     parser_train.add_argument('--model_type', type=str, required=True)
     parser_train.add_argument('--loss_type', type=str, required=True)
-    parser_train.add_argument('--augmentation', type=str, choices=['none', 'spec_augment', 'timeshift', 'mixup', 'timeshift_mixup', 'specaugment_timeshift_mixup', 'specaugment_mixup', 'specaugment_timeshift'], required=True)
+    parser_train.add_argument('--augmentation', type=str, choices=['none', 'spec_augment', 'timeshift', 'mixup',
+                              'timeshift_mixup', 'specaugment_timeshift_mixup', 'specaugment_mixup', 'specaugment_timeshift'], required=True)
     parser_train.add_argument('--learning_rate', type=float, required=True)
     parser_train.add_argument('--batch_size', type=int, required=True)
     parser_train.add_argument('--resume_iteration', type=int)
@@ -1303,74 +1369,124 @@ if __name__ == '__main__':
     parser_train.add_argument('--feature_type', type=str, required=True)
     parser_train.add_argument('--cuda', action='store_true', default=False)
     parser_train.add_argument('--audio_8k', action='store_true', default=False)
-    parser_train.add_argument('--audio_16k', action='store_true', default=False)
+    parser_train.add_argument(
+        '--audio_16k', action='store_true', default=False)
     parser_train.add_argument('--vggish', action='store_true', default=False)
     parser_train.add_argument('--fsd50k', action='store_true', default=False)
-    parser_train.add_argument('--mini_data', action='store_true', default=False)
-    parser_train.add_argument('-ms', '--model_summary', action='store_true', default=False)
-    parser_train.add_argument('-cbam', '--use_cbam', action='store_true', default=False)
+    parser_train.add_argument(
+        '--mini_data', action='store_true', default=False)
+    parser_train.add_argument('-ms', '--model_summary',
+                              action='store_true', default=False)
+    parser_train.add_argument('-cbam', '--use_cbam',
+                              action='store_true', default=False)
 
     # Inference
     parser_inference_prob = subparsers.add_parser('inference_prob')
-    parser_inference_prob.add_argument('--dataset_dir', type=str, required=True, help='Directory of dataset.')
-    parser_inference_prob.add_argument('--workspace', type=str, required=True, help='Directory of your workspace.')
-    parser_inference_prob.add_argument('--holdout_fold', type=str, choices=['1'], required=True)
+    parser_inference_prob.add_argument(
+        '--dataset_dir', type=str, required=True, help='Directory of dataset.')
+    parser_inference_prob.add_argument(
+        '--workspace', type=str, required=True, help='Directory of your workspace.')
+    parser_inference_prob.add_argument(
+        '--holdout_fold', type=str, choices=['1'], required=True)
     parser_inference_prob.add_argument('--model_type', type=str, required=True)
     parser_inference_prob.add_argument('--loss_type', type=str, required=True)
-    parser_inference_prob.add_argument('--augmentation', type=str, choices=['none', 'spec_augment', 'timeshift', 'mixup', 'timeshift_mixup', 'specaugment_timeshift_mixup', 'specaugment_mixup', 'specaugment_timeshift'], required=True)
-    parser_inference_prob.add_argument('--feature_type', type=str, required=True)
+    parser_inference_prob.add_argument('--augmentation', type=str, choices=['none', 'spec_augment', 'timeshift', 'mixup',
+                                       'timeshift_mixup', 'specaugment_timeshift_mixup', 'specaugment_mixup', 'specaugment_timeshift'], required=True)
+    parser_inference_prob.add_argument(
+        '--feature_type', type=str, required=True)
     parser_inference_prob.add_argument('--batch_size', type=int, required=True)
-    parser_inference_prob.add_argument('--cuda', action='store_true', default=False)
-    parser_inference_prob.add_argument('--fsd50k', action='store_true', default=False)
-    parser_inference_prob.add_argument('--audio_8k', action='store_true', default=False)
-    parser_inference_prob.add_argument('--audio_16k', action='store_true', default=False)
-    parser_inference_prob.add_argument('--vggish', action='store_true', default=False)
-    parser_inference_prob.add_argument('--sed_thresholds', action='store_true', default=False)
+    parser_inference_prob.add_argument(
+        '--cuda', action='store_true', default=False)
+    parser_inference_prob.add_argument(
+        '--fsd50k', action='store_true', default=False)
+    parser_inference_prob.add_argument(
+        '--audio_8k', action='store_true', default=False)
+    parser_inference_prob.add_argument(
+        '--audio_16k', action='store_true', default=False)
+    parser_inference_prob.add_argument(
+        '--vggish', action='store_true', default=False)
+    parser_inference_prob.add_argument(
+        '--sed_thresholds', action='store_true', default=False)
 
     # Inference (overlap + avg)
-    parser_inference_prob_overlap = subparsers.add_parser('inference_prob_overlap')
-    parser_inference_prob_overlap.add_argument('--dataset_dir', type=str, required=True, help='Directory of dataset.')
-    parser_inference_prob_overlap.add_argument('--workspace', type=str, required=True, help='Directory of your workspace.')
-    parser_inference_prob_overlap.add_argument('--holdout_fold', type=str, choices=['1'], required=True)
-    parser_inference_prob_overlap.add_argument('--model_type', type=str, required=True)
-    parser_inference_prob_overlap.add_argument('--loss_type', type=str, required=True)
-    parser_inference_prob_overlap.add_argument('--augmentation', type=str, choices=['none', 'spec_augment', 'timeshift', 'mixup', 'timeshift_mixup', 'specaugment_timeshift_mixup', 'specaugment_mixup', 'specaugment_timeshift'], required=True)
-    parser_inference_prob_overlap.add_argument('--feature_type', type=str, required=True)
-    parser_inference_prob_overlap.add_argument('--batch_size', type=int, required=True)
-    parser_inference_prob_overlap.add_argument('--sample_duration', type=int, default=2)
-    parser_inference_prob_overlap.add_argument('--cuda', action='store_true', default=False)
-    parser_inference_prob_overlap.add_argument('--sed_thresholds', action='store_true', default=False)
-    parser_inference_prob_overlap.add_argument('--audio_8k', action='store_true', default=False)
-    parser_inference_prob_overlap.add_argument('--audio_16k', action='store_true', default=False)
-    parser_inference_prob_overlap.add_argument('--data_type', type=str, required=True)
-    parser_inference_prob_overlap.add_argument('--fsd50k', action='store_true', default=False)
-    parser_inference_prob_overlap.add_argument('-ms', '--model_summary', action='store_true', default=False)
-    parser_inference_prob_overlap.add_argument('-cbam', '--use_cbam', action='store_true', default=False)
+    parser_inference_prob_overlap = subparsers.add_parser(
+        'inference_prob_overlap')
+    parser_inference_prob_overlap.add_argument(
+        '--dataset_dir', type=str, required=True, help='Directory of dataset.')
+    parser_inference_prob_overlap.add_argument(
+        '--workspace', type=str, required=True, help='Directory of your workspace.')
+    parser_inference_prob_overlap.add_argument(
+        '--holdout_fold', type=str, choices=['1'], required=True)
+    parser_inference_prob_overlap.add_argument(
+        '--model_type', type=str, required=True)
+    parser_inference_prob_overlap.add_argument(
+        '--loss_type', type=str, required=True)
+    parser_inference_prob_overlap.add_argument('--augmentation', type=str, choices=[
+                                               'none', 'spec_augment', 'timeshift', 'mixup', 'timeshift_mixup', 'specaugment_timeshift_mixup', 'specaugment_mixup', 'specaugment_timeshift'], required=True)
+    parser_inference_prob_overlap.add_argument(
+        '--feature_type', type=str, required=True)
+    parser_inference_prob_overlap.add_argument(
+        '--batch_size', type=int, required=True)
+    parser_inference_prob_overlap.add_argument(
+        '--sample_duration', type=int, default=2)
+    parser_inference_prob_overlap.add_argument(
+        '--cuda', action='store_true', default=False)
+    parser_inference_prob_overlap.add_argument(
+        '--sed_thresholds', action='store_true', default=False)
+    parser_inference_prob_overlap.add_argument(
+        '--audio_8k', action='store_true', default=False)
+    parser_inference_prob_overlap.add_argument(
+        '--audio_16k', action='store_true', default=False)
+    parser_inference_prob_overlap.add_argument(
+        '--data_type', type=str, required=True)
+    parser_inference_prob_overlap.add_argument(
+        '--fsd50k', action='store_true', default=False)
+    parser_inference_prob_overlap.add_argument(
+        '-ms', '--model_summary', action='store_true', default=False)
+    parser_inference_prob_overlap.add_argument(
+        '-cbam', '--use_cbam', action='store_true', default=False)
 
     # Inference (overlap + vote)
     parser_inference_prob_vote = subparsers.add_parser('inference_prob_vote')
-    parser_inference_prob_vote.add_argument('--dataset_dir', type=str, required=True, help='Directory of dataset.')
-    parser_inference_prob_vote.add_argument('--workspace', type=str, required=True, help='Directory of your workspace.')
-    parser_inference_prob_vote.add_argument('--holdout_fold', type=str, choices=['1'], required=True)
-    parser_inference_prob_vote.add_argument('--model_type', type=str, required=True)
-    parser_inference_prob_vote.add_argument('--loss_type', type=str, required=True)
-    parser_inference_prob_vote.add_argument('--augmentation', type=str, choices=['none', 'spec_augment', 'timeshift', 'mixup', 'timeshift_mixup', 'specaugment_timeshift_mixup', 'specaugment_mixup', 'specaugment_timeshift'], required=True)
-    parser_inference_prob_vote.add_argument('--feature_type', type=str, required=True)
-    parser_inference_prob_vote.add_argument('--batch_size', type=int, required=True)
-    parser_inference_prob_vote.add_argument('--sample_duration', type=int, default=2)
-    parser_inference_prob_vote.add_argument('--cuda', action='store_true', default=False)
-    parser_inference_prob_vote.add_argument('--sed_thresholds', action='store_true', default=False)
-    parser_inference_prob_vote.add_argument('--audio_8k', action='store_true', default=False)
-    parser_inference_prob_vote.add_argument('--audio_16k', action='store_true', default=False)
-    parser_inference_prob_vote.add_argument('--data_type', type=str, required=True)
-    parser_inference_prob_vote.add_argument('--fsd50k', action='store_true', default=False)
+    parser_inference_prob_vote.add_argument(
+        '--dataset_dir', type=str, required=True, help='Directory of dataset.')
+    parser_inference_prob_vote.add_argument(
+        '--workspace', type=str, required=True, help='Directory of your workspace.')
+    parser_inference_prob_vote.add_argument(
+        '--holdout_fold', type=str, choices=['1'], required=True)
+    parser_inference_prob_vote.add_argument(
+        '--model_type', type=str, required=True)
+    parser_inference_prob_vote.add_argument(
+        '--loss_type', type=str, required=True)
+    parser_inference_prob_vote.add_argument('--augmentation', type=str, choices=[
+                                            'none', 'spec_augment', 'timeshift', 'mixup', 'timeshift_mixup', 'specaugment_timeshift_mixup', 'specaugment_mixup', 'specaugment_timeshift'], required=True)
+    parser_inference_prob_vote.add_argument(
+        '--feature_type', type=str, required=True)
+    parser_inference_prob_vote.add_argument(
+        '--batch_size', type=int, required=True)
+    parser_inference_prob_vote.add_argument(
+        '--sample_duration', type=int, default=2)
+    parser_inference_prob_vote.add_argument(
+        '--cuda', action='store_true', default=False)
+    parser_inference_prob_vote.add_argument(
+        '--sed_thresholds', action='store_true', default=False)
+    parser_inference_prob_vote.add_argument(
+        '--audio_8k', action='store_true', default=False)
+    parser_inference_prob_vote.add_argument(
+        '--audio_16k', action='store_true', default=False)
+    parser_inference_prob_vote.add_argument(
+        '--data_type', type=str, required=True)
+    parser_inference_prob_vote.add_argument(
+        '--fsd50k', action='store_true', default=False)
 
     # Parse arguments
     args = parser.parse_args()
     args.filename = get_filename(__file__)
 
+    wandb.init(project="st-project-sed", entity="sohamtiwari3120")
+
     if args.mode == 'train':
-        train(args)
+        train(wandb, args)
 
     elif args.mode == 'inference_prob':
         inference_prob(args)
