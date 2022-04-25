@@ -58,6 +58,7 @@ def train(wandb, args):
     """
     wandb.config = args
     # Arugments & parameters
+    experiment_name = args.experiment_name
     dataset_dir = args.dataset_dir
     workspace = args.workspace
     holdout_fold = args.holdout_fold
@@ -156,7 +157,7 @@ def train(wandb, args):
                                        holdout_fold),
                                    'model_type={}'.format(
                                        model_type), 'loss_type={}'.format(loss_type),
-                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}")
+                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name)
 
     tmp_submission_path = os.path.join(workspace, '_tmp_submission', file_header,
                                        '{}{}'.format(prefix, filename), 'holdout_fold={}'.format(
@@ -164,7 +165,7 @@ def train(wandb, args):
                                        'model_type={}'.format(
                                            model_type), 'loss_type={}'.format(loss_type),
                                        'augmentation={}'.format(augmentation), 'batch_size={}'.format(
-                                           batch_size), f"use_cbam={use_cbam}",
+                                           batch_size), f"use_cbam={use_cbam}", experiment_name,
                                        submission_name)
 
     statistics_path = os.path.join(workspace, 'statistics', file_header,
@@ -173,7 +174,7 @@ def train(wandb, args):
                                    'model_type={}'.format(
                                        model_type), 'loss_type={}'.format(loss_type),
                                    'augmentation={}'.format(augmentation), 'batch_size={}'.format(
-                                       batch_size), f"use_cbam={use_cbam}",
+                                       batch_size), f"use_cbam={use_cbam}", experiment_name,
                                    statistics_name)
 
     logs_dir = os.path.join(workspace, 'logs', file_header, '{}{}'.format(prefix, filename),
@@ -181,7 +182,7 @@ def train(wandb, args):
                                 holdout_fold), 'model_type={}'.format(model_type),
                             'loss_type={}'.format(
                                 loss_type), 'augmentation={}'.format(augmentation),
-                            'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}")
+                            'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name)
 
     create_folder(checkpoints_dir)
     create_folder(os.path.dirname(tmp_submission_path))
@@ -287,8 +288,6 @@ def train(wandb, args):
 
     train_bgn_time = time.time()
 
-    error_rates = []
-    framewise_maps = []
     best_error_rate = 10000
     best_framewise_map = 0
     best_iteration = 0
@@ -1352,6 +1351,7 @@ if __name__ == '__main__':
 
     # Train
     parser_train = subparsers.add_parser('train')
+    parser_train.add_argument('-en', '--experiment_name', type=str, required=True)
     parser_train.add_argument(
         '--dataset_dir', type=str, required=True, help='Directory of dataset.')
     parser_train.add_argument(
