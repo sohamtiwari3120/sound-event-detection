@@ -1,35 +1,35 @@
+import numpy as np
+import pandas as pd
+import argparse
+import librosa
+import wandb
+import math
+import time
+import pickle
+import logging
+from glob import glob
+import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import torch.utils.data
+from torchsummary import summary
+import config
+from evaluate import Evaluator
+from config import (sample_rate, classes_num, mel_bins, fmin, fmax,
+                    window_size, hop_size, window, pad_mode, center, device, ref, amin, top_db, time_steps, mel_bins)
+from losses import get_loss_func
+from pytorch_utils import move_data_to_device, do_mixup, do_mixup_timeshift
+from utilities import (create_folder, frame_prediction_to_event_prediction_v2, frame_prediction_to_event_prediction, get_filename, create_logging, official_evaluate, frame_binary_prediction_to_event_prediction,
+                       StatisticsContainer, pad_truncate_sequence, write_submission, Mixup, count_parameters, merge, avg_merge, append_to_dict)
+from calculate_metrics import get_metric
+from data_generator import (AudiosetDataset, TrainSampler, TestSampler,
+                            collate_fn)
+from models import *
 import os
 import sys
 sys.path.insert(1, os.path.join(sys.path[0], '../utils'))
-from models import *
-from data_generator import (AudiosetDataset, TrainSampler, TestSampler,
-                            collate_fn)
-from calculate_metrics import get_metric
-from utilities import (create_folder, frame_prediction_to_event_prediction_v2, frame_prediction_to_event_prediction, get_filename, create_logging, official_evaluate, frame_binary_prediction_to_event_prediction,
-                       StatisticsContainer, pad_truncate_sequence, write_submission, Mixup, count_parameters, merge, avg_merge, append_to_dict)
-from pytorch_utils import move_data_to_device, do_mixup, do_mixup_timeshift
-from losses import get_loss_func
-from config import (sample_rate, classes_num, mel_bins, fmin, fmax,
-                    window_size, hop_size, window, pad_mode, center, device, ref, amin, top_db, time_steps, mel_bins)
-from evaluate import Evaluator
-import config
-from torchsummary import summary
-import torch.utils.data
-import torch.optim as optim
-import torch.nn.functional as F
-import torch.nn as nn
-import torch
-import matplotlib.pyplot as plt
-from glob import glob
-import logging
-import pickle
-import time
-import math
-import wandb
-import librosa
-import argparse
-import pandas as pd
-import numpy as np
 
 
 def cycle_iteration(iterable):
@@ -319,11 +319,12 @@ def train(wandb, args):
                     np.nanmean(statistics['framewise_ap'])))
                 logging.info('    {}'.format(
                     statistics['sed_metrics']['overall']['error_rate']))
-                wandb.log({
+                wandb.log({"eval": {
+                    "iteration": iteration,
                     "Clipwise mAP": np.nanmean(statistics['clipwise_ap']),
                     "Framewise mAP": np.nanmean(statistics['framewise_ap']),
                     "sed_metrics-overall-error_rate": statistics['sed_metrics']['overall']['error_rate']
-                })
+                }})
                 statistics_container.append(data_type, iteration, statistics)
 
                 if data_type == 'eval':
@@ -331,10 +332,10 @@ def train(wandb, args):
 
                         best_framewise_map = np.nanmean(
                             statistics['framewise_ap'])
-                        best_error_rate = statistics['sed_metrics']['overall']['error_rate']['error_rate']
-                        best_iteration = iteration
+                        best_error_rate=statistics['sed_metrics']['overall']['error_rate']['error_rate']
+                        best_iteration=iteration
 
-                        checkpoint = {
+                        checkpoint={
                             'iteration': iteration,
                             'model': model.module.state_dict(),
                             'optimizer': optimizer.state_dict()}
@@ -348,30 +349,30 @@ def train(wandb, args):
 
             statistics_container.dump()
 
-            train_time = train_fin_time - train_bgn_time
-            validate_time = time.time() - train_fin_time
+            train_time=train_fin_time - train_bgn_time
+            validate_time=time.time() - train_fin_time
 
             logging.info(
                 'Train time: {:.3f} s, validate time: {:.3f} s'
                 ''.format(train_time, validate_time))
 
-            train_bgn_time = time.time()
+            train_bgn_time=time.time()
 
         # Load samples
         # weak_batch_data_dict = next(weak_iter)
-        strong_batch_data_dict = next(strong_iter)
+        strong_batch_data_dict=next(strong_iter)
 
         if 'mixup' in augmentation:
             # weak_batch_data_dict['mixup_lambda'] = mixup_augmenter.get_lambda(
             #     batch_size=len(weak_batch_data_dict['waveform']))
-            strong_batch_data_dict['mixup_lambda'] = mixup_augmenter.get_lambda(
-                batch_size=len(strong_batch_data_dict['waveform']))
+            strong_batch_data_dict['mixup_lambda']=mixup_augmenter.get_lambda(
+                batch_size = len(strong_batch_data_dict['waveform']))
 
         # Move data to GPU
         # for key in weak_batch_data_dict.keys():
         #     weak_batch_data_dict[key] = move_data_to_device(weak_batch_data_dict[key], device)
         for key in strong_batch_data_dict.keys():
-            strong_batch_data_dict[key] = move_data_to_device(
+            strong_batch_data_dict[key]=move_data_to_device(
                 strong_batch_data_dict[key], device)
 
         # Train
@@ -380,17 +381,17 @@ def train(wandb, args):
         if 'mixup' in augmentation:
             # weak_batch_output_dict = model(weak_batch_data_dict['waveform'], weak_batch_data_dict['mixup_lambda'], timeshift=timeshift, spec_augment=spec_augment)
             # weak_batch_target_dict = {'target': do_mixup(weak_batch_data_dict['target'], weak_batch_data_dict['mixup_lambda'])}
-            strong_batch_output_dict = model(
-                strong_batch_data_dict['waveform'], strong_batch_data_dict['mixup_lambda'], timeshift=timeshift, spec_augment=spec_augment)
-            strong_batch_target_dict = {'strong_target': do_mixup(
+            strong_batch_output_dict=model(
+                strong_batch_data_dict['waveform'], strong_batch_data_dict['mixup_lambda'], timeshift = timeshift, spec_augment = spec_augment)
+            strong_batch_target_dict={'strong_target': do_mixup(
                 strong_batch_data_dict['strong_target'], strong_batch_data_dict['mixup_lambda'])}
 
         else:
             # weak_batch_output_dict = model(weak_batch_data_dict['waveform'], None, timeshift=timeshift, spec_augment=spec_augment)
             # weak_batch_target_dict = {'target': weak_batch_data_dict['target']}
-            strong_batch_output_dict = model(
-                strong_batch_data_dict['waveform'], None, timeshift=timeshift, spec_augment=spec_augment)
-            strong_batch_target_dict = {
+            strong_batch_output_dict=model(
+                strong_batch_data_dict['waveform'], None, timeshift = timeshift, spec_augment = spec_augment)
+            strong_batch_target_dict={
                 'strong_target': strong_batch_data_dict['strong_target']}
 
         # loss
@@ -398,9 +399,9 @@ def train(wandb, args):
         strong_loss = strong_loss_func(
             strong_batch_output_dict, strong_batch_target_dict)
 
-        loss = strong_loss
+        loss=strong_loss
         print('{} iteration - strong: {}, total: {}'.format(iteration, strong_loss, loss))
-        wandb.log({"iteration":{
+        wandb.log({"train": {
             "strong_loss": strong_loss
         }})
 
@@ -433,69 +434,69 @@ def inference_prob(self):
     """
 
     # Arugments & parameters
-    dataset_dir = args.dataset_dir
-    workspace = args.workspace
-    holdout_fold = args.holdout_fold
-    model_type = args.model_type
-    loss_type = args.loss_type
-    augmentation = args.augmentation
-    batch_size = args.batch_size
-    feature_type = args.feature_type
-    fsd50k = args.fsd50k
-    audio_8k = args.audio_8k
-    audio_16k = args.audio_16k
-    vggish = args.vggish
-    device = 'cuda' if (args.cuda and torch.cuda.is_available()) else 'cpu'
-    sed_thresholds = args.sed_thresholds
-    filename = args.filename
+    dataset_dir=args.dataset_dir
+    workspace=args.workspace
+    holdout_fold=args.holdout_fold
+    model_type=args.model_type
+    loss_type=args.loss_type
+    augmentation=args.augmentation
+    batch_size=args.batch_size
+    feature_type=args.feature_type
+    fsd50k=args.fsd50k
+    audio_8k=args.audio_8k
+    audio_16k=args.audio_16k
+    vggish=args.vggish
+    device='cuda' if (args.cuda and torch.cuda.is_available()) else 'cpu'
+    sed_thresholds=args.sed_thresholds
+    filename=args.filename
 
-    num_workers = 8
-    data_type = 'testing'
+    num_workers=8
+    data_type='testing'
 
     if audio_8k:
-        quality = '8k'
-        sample_rate = 8000
-        window_size = 256
-        hop_size = 80
-        mel_bins = 64
-        fmin = 12
-        fmax = 3500
+        quality='8k'
+        sample_rate=8000
+        window_size=256
+        hop_size=80
+        mel_bins=64
+        fmin=12
+        fmax=3500
     elif audio_16k:
-        quality = '16k'
-        sample_rate = 16000
-        window_size = 512
-        hop_size = 160
-        mel_bins = 64
-        fmin = 25
-        fmax = 7000
+        quality='16k'
+        sample_rate=16000
+        window_size=512
+        hop_size=160
+        mel_bins=64
+        fmin=25
+        fmax=7000
     else:
-        quality = '32k'
-        sample_rate = config.sample_rate
-        window_size = window_size = config.window_size
-        hop_size = config.hop_size
-        mel_bins = config.mel_bins
-        fmin = config.fmin
-        fmax = config.fmax
+        quality='32k'
+        sample_rate=config.sample_rate
+        window_size=window_size=config.window_size
+        hop_size=config.hop_size
+        mel_bins=config.mel_bins
+        fmin=config.fmin
+        fmax=config.fmax
 
-    audio_samples = sample_rate * 10
-    frames_per_second = sample_rate // hop_size
+    audio_samples=sample_rate * 10
+    frames_per_second=sample_rate // hop_size
 
     # Paths
-    test_hdf5_path = os.path.join(
+    test_hdf5_path=os.path.join(
         workspace, 'hdf5s', '{}_{}_{}.h5'.format(data_type, feature_type, quality))
 
-    checkpoint_name = 'best_{}_{}.pth'.format(feature_type, quality)
-    submission_name = '_submission_{}_{}.csv'.format(feature_type, quality)
+    checkpoint_name='best_{}_{}.pth'.format(feature_type, quality)
+    submission_name='_submission_{}_{}.csv'.format(feature_type, quality)
 
     if fsd50k:
-        pre_dir = 'fsd50k'
+        pre_dir='fsd50k'
     else:
-        pre_dir = ''
+        pre_dir=''
 
-    test_reference_csv_path = os.path.join(dataset_dir, 'metadata',
+    test_reference_csv_path=os.path.join(dataset_dir, 'metadata',
                                            'groundtruth_strong_label_{}_set.csv'.format(data_type))
 
-    checkpoint_path = os.path.join(workspace, 'checkpoints', pre_dir,
+    checkpoint_path=os.path.join(workspace, 'checkpoints', pre_dir,
                                    '{}'.format(filename), 'holdout_fold={}'.format(
                                        holdout_fold),
                                    'model_type={}'.format(
@@ -643,7 +644,7 @@ def inference_prob_overlap(self):
     data_type = args.data_type
     fsd50k = args.fsd50k
     use_cbam = args.use_cbam
-    #data_type = 'testing'
+    # data_type = 'testing'
 
     num_workers = 8
 
@@ -763,7 +764,7 @@ def inference_prob_overlap(self):
     audio_files = ['{}/{}'.format(audios_dir, x) for x in audio_files]
     full_audio_files = glob('{}/*.wav'.format(audios_dir))
 
-    #audio_files = sorted(glob('{}/*.wav'.format(audios_dir)))
+    # audio_files = sorted(glob('{}/*.wav'.format(audios_dir)))
     audios_num = len(audio_files)
     print('NUMBER OF AUDIO FILES:', audios_num)
     audio_samples = sample_rate * 10  # sample_duration
@@ -775,7 +776,7 @@ def inference_prob_overlap(self):
         start_time = time.time()
         for n in range(audios_num):
             audio_name = audio_files[n]
-            #print('Predicting on {}'.format(audio_name))
+            # print('Predicting on {}'.format(audio_name))
             if audio_8k:
                 for filename in full_audio_files:
                     if audio_name.split('/')[-1].split('.wav')[0] in filename:
@@ -790,7 +791,7 @@ def inference_prob_overlap(self):
                 print(2, full_audio_name)
                 continue
             predict_length += audio_duration
-            #print('Total audio duration: {} s'.format(audio_duration))
+            # print('Total audio duration: {} s'.format(audio_duration))
             num_segment = 1
             index = 0
             start = 0
@@ -841,7 +842,7 @@ def inference_prob_overlap(self):
                 prev_clipwise = output_dict['clipwise_output']
                 prev_preds = output_dict['framewise_output']
 
-                #start += 1
+                # start += 1
                 start += overlap_value
                 end = start + sample_duration
                 num_segment += 1
@@ -1040,7 +1041,7 @@ def inference_prob_vote(self):
             'n_salt': 10}
 
     param_combinations = [[0.5, 6], [0.5, 7], [1, 5], [1, 6], [1, 7]]
-    #param_combinations = [[1,5]]
+    # param_combinations = [[1,5]]
 
     if audio_8k:
         audios_dir = os.path.join(dataset_dir, data_type, '8k')
@@ -1052,7 +1053,7 @@ def inference_prob_vote(self):
     audio_files = ['{}/{}'.format(audios_dir, x) for x in audio_files]
     full_audio_files = glob('{}/*.wav'.format(audios_dir))
 
-    #audio_files = sorted(glob('{}/*.wav'.format(audios_dir)))
+    # audio_files = sorted(glob('{}/*.wav'.format(audios_dir)))
     audios_num = len(audio_files)
     print('NUMBER OF AUDIO FILES:', audios_num)
     audio_samples = sample_rate * 10  # sample_duration
@@ -1126,11 +1127,11 @@ def inference_prob_vote(self):
                 prev_preds = binarize_pred(
                     prev_preds, sed_params_dict['sed_low_threshold'], sed_thresholds)
 
-                #start += 1
+                # start += 1
                 start += overlap_value
                 end = start + sample_duration
                 num_segment += 1
-            #merged = avg_merge(merged, sample_duration, overlap_value)
+            # merged = avg_merge(merged, sample_duration, overlap_value)
             # np.set_printoptions(threshold=sys.maxsize)
             predict_event_list = frame_binary_prediction_to_event_prediction(
                 merged, overlap_value, sample_duration, audio_name.split('/')[-1], sed_params_dict)
