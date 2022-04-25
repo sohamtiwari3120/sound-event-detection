@@ -209,7 +209,7 @@ def train(wandb, args):
     else:
         model = Model(sample_rate, window_size, hop_size, mel_bins,
                       fmin, fmax, classes_num, feature_type, use_cbam)
-
+    wandb.watch(model, log_freq=100)
     statistics_container = StatisticsContainer(statistics_path)
     if model_summary:
         summary(model, (160000,), device="cpu")
