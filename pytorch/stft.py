@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
-from gammatone.fftweight import fft_gtgram
+from utils.gammatone.fftweight import fft_gtgram
 
 
 class DFTBase(nn.Module):
