@@ -400,6 +400,9 @@ def train(wandb, args):
 
         loss = strong_loss
         print('{} iteration - strong: {}, total: {}'.format(iteration, strong_loss, loss))
+        wandb.log({"iteration":{
+            "strong_loss": strong_loss
+        }})
 
         # Backward
         optimizer.zero_grad()
