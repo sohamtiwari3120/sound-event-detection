@@ -1,3 +1,6 @@
+import os
+import sys
+sys.path.insert(1, os.path.join(sys.path[0], '../utils'))
 from models import *
 from data_generator import (AudiosetDataset, TrainSampler, TestSampler,
                             collate_fn)
@@ -27,9 +30,6 @@ import librosa
 import argparse
 import pandas as pd
 import numpy as np
-import os
-import sys
-sys.path.insert(1, os.path.join(sys.path[0], '../utils'))
 
 
 def cycle_iteration(iterable):
