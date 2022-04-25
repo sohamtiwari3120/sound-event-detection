@@ -637,8 +637,6 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
 
         # out_s3prl = self.extractor_s3prl(wavs)['last_hidden_state']
 
-        print(12345, input.shape)
-
         if self.feature_type == 'logmel':
             x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
             x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
