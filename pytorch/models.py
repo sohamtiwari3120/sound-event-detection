@@ -1,5 +1,4 @@
 import os
-import sys
 import math
 import numpy as np
 
@@ -7,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
+from pann_encoder import Cnn10
 
 from pytorch_utils import do_mixup, do_mixup_timeshift, do_timeshift
 from augmentation import SpecAugmentation
@@ -701,6 +701,106 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
 
         return output_dict
 
+class PANN_Gru_FrameAtt(nn.Module):
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
+        fmax, classes_num, feature_type, pann_cnn10_encoder_ckpt_path, use_cbam=False):
+
+        super(PANN_Gru_FrameAtt, self).__init__()
+
+        window = 'hann'
+        center = True
+        pad_mode = 'reflect'
+        ref = 1.0
+        amin = 1e-10
+        top_db = None
+        self.feature_type = feature_type
+        self.use_cbam = use_cbam
+
+        # Spectrogram extractor
+        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size,
+            win_length=window_size, window=window, center=center, pad_mode=pad_mode,
+            freeze_parameters=True)
+
+        # Logmel feature extractor
+        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size,
+            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db,
+            freeze_parameters=True)
+
+        # Spec augmenter
+        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2,
+            freq_drop_width=8, freq_stripes_num=2)
+
+
+        self.pann_encoder = Cnn10()
+        if len(pann_cnn10_encoder_ckpt_path) > 0 and os.path.exists(pann_cnn10_encoder_ckpt_path) == False:
+                raise Exception(
+                    f"Model checkpoint path '{pann_cnn10_encoder_ckpt_path}' does not exist/not found.")
+        self.pann_cnn10_encoder_ckpt_path = pann_cnn10_encoder_ckpt_path
+        if self.pann_cnn10_encoder_ckpt_path != '':
+            self.encoder.load_state_dict(torch.load(
+                self.pann_cnn10_encoder_ckpt_path)['model'], strict=False)
+            print(
+                f'loaded pann_cnn10 pretrained encoder state from {self.pann_cnn10_encoder_ckpt_path}')
+
+        if self.use_cbam:
+            self.cbam = CBAMBlock(512, 2, 3)
+        self.gru = nn.GRU(input_size=512, hidden_size=256, num_layers=1,
+            bias=True, batch_first=True, bidirectional=True)
+
+        self.att_block = AttBlock(n_in=512, n_out=classes_num, activation='sigmoid')
+
+        self.init_weights()
+
+    def init_weights(self):
+        init_gru(self.gru)
+
+    def forward(self, input, mixup_lambda=None, timeshift=False, spec_augment=True):
+        """Input: (batch_size, time_steps, freq_bins)"""
+
+        interpolate_ratio = 8
+
+        if self.feature_type == 'logmel':
+            x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
+            x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
+
+        # SpecAugmnet on spectrogram
+        if self.training and spec_augment:
+            x = self.spec_augmenter(x)
+
+
+        # Mixup on spectrogram
+        if self.training and mixup_lambda is not None:
+            if not timeshift:
+                x = do_mixup(x, mixup_lambda)
+            elif timeshift:
+                x = do_mixup_timeshift(x, mixup_lambda)
+
+
+        if self.training and mixup_lambda is None and timeshift:
+            x = do_timeshift(x)
+
+        x = self.pann_encoder(x)
+        
+        x = torch.mean(x, dim=3)
+        x = x.transpose(1, 2)   # (batch_size, time_steps, channels)
+        (x, _) = self.gru(x)
+        x = x.transpose(1, 2)
+
+        (clipwise_output, norm_att, cla) = self.att_block(x)
+        """cla: (batch_size, classes_num, time_stpes)"""
+
+        # Framewise output
+        framewise_output = cla.transpose(1, 2)
+        framewise_output = interpolate(framewise_output, interpolate_ratio)
+        if framewise_output.size()[1] != 1000:
+            framewise_output = pad_framewise_output(framewise_output, roundup(framewise_output.size()[1]))
+
+        output_dict = {
+            'framewise_output': framewise_output,
+            'clipwise_output': clipwise_output,
+            'embedding': cla}
+
+        return output_dict
 
 class Cnn_14layers_Gru_FrameAtt(nn.Module):
     def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,

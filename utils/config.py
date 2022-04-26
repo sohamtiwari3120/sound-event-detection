@@ -38,3 +38,6 @@ def lb_to_idx(label):
         raise Exception(f'Invalid label -{label} provided. Should be one of {labels} or {siren_fine_labels}')
         
 idx_to_lb = {idx: lb for idx, lb in enumerate(labels)}
+
+pann_cnn10_encoder_ckpt_path = '/notebooks/sound-event-classification/audioset/model/Cnn10_mAP=0.380.pth'
+pann_cnn14_encoder_ckpt_path = '/notebooks/sound-event-classification/audioset/model/Cnn14_mAP=0.431.pth'
