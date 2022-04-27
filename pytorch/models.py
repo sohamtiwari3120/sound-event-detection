@@ -737,7 +737,7 @@ class PANN_Gru_FrameAtt(nn.Module):
                     f"Model checkpoint path '{pann_cnn10_encoder_ckpt_path}' does not exist/not found.")
         self.pann_cnn10_encoder_ckpt_path = pann_cnn10_encoder_ckpt_path
         if self.pann_cnn10_encoder_ckpt_path != '':
-            self.encoder.load_state_dict(torch.load(
+            self.pann_encoder.load_state_dict(torch.load(
                 self.pann_cnn10_encoder_ckpt_path)['model'], strict=False)
             print(
                 f'loaded pann_cnn10 pretrained encoder state from {self.pann_cnn10_encoder_ckpt_path}')
