@@ -11,7 +11,7 @@ import sklearn
 import pickle
 from sklearn import metrics
 import matplotlib.pyplot as plt
-
+import torch
 from evaluate import Evaluator
 from config import (sample_rate, classes_num, mel_bins, fmin, fmax,
     window_size, hop_size, window, pad_mode, center, device, ref, amin, top_db)
@@ -303,6 +303,8 @@ def optimize_sed_thresholds(args):
     """
     
     # Arugments & parameters
+    use_cbam = args.use_cbam
+    experiment_name = args.experiment_name
     dataset_dir = args.dataset_dir
     workspace = args.workspace
     filename = args.filename
@@ -378,19 +380,19 @@ def optimize_sed_thresholds(args):
     checkpoint_path = os.path.join(workspace, 'checkpoints', pre_dir,
         '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
         'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
+        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
         checkpoint_name)
 
     predictions_dir = os.path.join(workspace, 'predictions', pre_dir,
         '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
         'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size))
+        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name)
     create_folder(predictions_dir)
 
     tmp_submission_path = os.path.join(workspace, '_tmp_submission', pre_dir,
         '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
         'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
+        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
         submission_name)
     create_folder(os.path.dirname(tmp_submission_path))
 
@@ -398,10 +400,11 @@ def optimize_sed_thresholds(args):
     assert model_type, 'Please specify model_type!'
     Model = eval(model_type)
     model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
-        classes_num, feature_type)
+        classes_num, feature_type, use_cbam)
 
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model'])
+    print(f'Loaded model checkpoint from: {checkpoint_path}')
 
     # Parallel
     print('GPU number: {}'.format(torch.cuda.device_count()))
@@ -447,26 +450,26 @@ def optimize_sed_thresholds(args):
     prediction_path = os.path.join(workspace, 'predictions', pre_dir,
         '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold), 
         'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type), 
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
+        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
         predict_name)
     
     tmp_submission_path = os.path.join(workspace, '_tmp_submission', pre_dir,
         '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold), 
         'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type), 
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
+        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
         submission_name)
 
     opt_thresholds_path = os.path.join(workspace, 'opt_thresholds', pre_dir,
         '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold), 
         'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type), 
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
+        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
         'best_{}_{}.sed.{}.pkl'.format(feature_type, quality, data_type))
     create_folder(os.path.dirname(opt_thresholds_path))
     
     save_record_path = os.path.join(workspace, 'opt_thresholds', pre_dir,
         '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
         'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
+        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
         'record_{}_{}.sed.{}.pkl'.format(feature_type, quality, data_type))
     create_folder(os.path.dirname(save_record_path))
 
@@ -525,6 +528,9 @@ if __name__ == '__main__':
     parser_optimize_at_thresholds.add_argument('--iteration', type=int, required=True)
 
     parser_optimize_sed_thresholds = subparsers.add_parser('optimize_sed_thresholds')
+    parser_optimize_sed_thresholds.add_argument('-en', '--experiment_name', type=str, required=True)
+    parser_optimize_sed_thresholds.add_argument(
+        '-cbam', '--use_cbam', action='store_true', default=False)
     parser_optimize_sed_thresholds.add_argument('--dataset_dir', type=str, required=True)
     parser_optimize_sed_thresholds.add_argument('--workspace', type=str, required=True)
     parser_optimize_sed_thresholds.add_argument('--filename', type=str, required=True)
