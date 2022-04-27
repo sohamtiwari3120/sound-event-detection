@@ -1,36 +1,37 @@
+from utilities import (get_filename, create_folder,
+                       frame_prediction_to_event_prediction, write_submission, official_evaluate)
+import config
+from calculate_metrics import calculate_precision_recall_f1, calculate_metrics
+from models import *
+from data_generator import (
+    AudiosetDataset, TrainSampler, TestSampler, collate_fn)
+from utilities import (create_folder, frame_prediction_to_event_prediction_v2, get_filename, create_logging, official_evaluate, frame_binary_prediction_to_event_prediction,
+                       StatisticsContainer, pad_truncate_sequence, write_submission, Mixup)
+from pytorch_utils import move_data_to_device, do_mixup, do_mixup_timeshift
+from losses import get_loss_func
+from config import (sample_rate, classes_num, mel_bins, fmin, fmax,
+                    window_size, hop_size, window, pad_mode, center, device, ref, amin, top_db, pann_cnn10_encoder_ckpt_path)
+from evaluate import Evaluator
+import torch
+import matplotlib.pyplot as plt
+from sklearn import metrics
+import pickle
+import sklearn
+import logging
+import time
+import math
+import h5py
+import argparse
+import numpy as np
 import os
 import sys
 sys.path.insert(1, os.path.join(sys.path[0], '../pytorch'))
-import numpy as np
-import argparse
-import h5py
-import math
-import time
-import logging
-import sklearn
-import pickle
-from sklearn import metrics
-import matplotlib.pyplot as plt
-import torch
-from evaluate import Evaluator
-from config import (sample_rate, classes_num, mel_bins, fmin, fmax,
-    window_size, hop_size, window, pad_mode, center, device, ref, amin, top_db)
-from losses import get_loss_func
-from pytorch_utils import move_data_to_device, do_mixup, do_mixup_timeshift
-from utilities import (create_folder, frame_prediction_to_event_prediction_v2, get_filename, create_logging, official_evaluate, frame_binary_prediction_to_event_prediction,
-    StatisticsContainer, pad_truncate_sequence, write_submission, Mixup)
-from data_generator import (AudiosetDataset, TrainSampler, TestSampler, collate_fn)
-from models import *
 #from autoth.core import HyperParamsOptimizer
 
-from utilities import (get_filename, create_folder, 
-    frame_prediction_to_event_prediction, write_submission, official_evaluate)
-from calculate_metrics import calculate_precision_recall_f1, calculate_metrics
-import config
 
 class HyperParamsOptimizer(object):
     def __init__(self, score_calculator, save_dict, learning_rate=1e-2, epochs=100,
-        step=0.01, max_search=5):
+                 step=0.01, max_search=5):
         """Hyper parameters optimizer. Parameters are optimized using gradient
         descend methods by using the numerically calculated graident:
         gradient: f(x + h) - f(x) / (h)
@@ -42,7 +43,7 @@ class HyperParamsOptimizer(object):
           step: float, equals h for calculating gradients
           max_search: int, if plateaued, then search for at most max_search times
         """
-        
+
         self.score_calculator = score_calculator
         self.learning_rate = learning_rate
         self.epochs = epochs
@@ -65,9 +66,10 @@ class HyperParamsOptimizer(object):
             grads = [-e for e in grads]
             params = self.optimizer.GetNewParams(params, grads)
             self.save_dict[i] = {'thresholds': params, 'score': score}
-            print('    Hyper parameters: {}, score: {:.4f}'.format([round(param, 4) for param in params], score))
+            print('    Hyper parameters: {}, score: {:.4f}'.format(
+                [round(param, 4) for param in params], score))
             print('    Epoch: {}, Time: {:.4f} s'.format(i, time.time() - t1))
-        
+
         return score, params, self.save_dict
 
     def calculate_gradients(self, params):
@@ -116,24 +118,29 @@ class Adam(Base):
         self.beta2 = 0.999
         self.eps = 1e-8
         self.iter = 0
-        
+
     def GetNewParams(self, params, gparams):
         if not self.ms:
             for param in params:
                 self.ms += [np.zeros_like(param)]
                 self.vs += [np.zeros_like(param)]
-          
+
         # fast adam, faster than origin adam
         self.iter += 1
         new_params = []
-        alpha_t = self.alpha * np.sqrt(1 - np.power(self.beta2, self.iter)) / (1 - np.power(self.beta1, self.iter))
+        alpha_t = self.alpha * \
+            np.sqrt(1 - np.power(self.beta2, self.iter)) / \
+            (1 - np.power(self.beta1, self.iter))
         for i1 in range(len(params)):
-            self.ms[i1] = self.beta1 * self.ms[i1] + (1 - self.beta1) * gparams[i1]
-            self.vs[i1] = self.beta2 * self.vs[i1] + (1 - self.beta2) * np.square(gparams[i1])
-            new_params += [params[i1] - alpha_t * self.ms[i1] / (np.sqrt(self.vs[i1] + self.eps))]
-            
+            self.ms[i1] = self.beta1 * self.ms[i1] + \
+                (1 - self.beta1) * gparams[i1]
+            self.vs[i1] = self.beta2 * self.vs[i1] + \
+                (1 - self.beta2) * np.square(gparams[i1])
+            new_params += [params[i1] - alpha_t *
+                           self.ms[i1] / (np.sqrt(self.vs[i1] + self.eps))]
+
         return new_params
-        
+
     def reset(self):
         self._reset_memory(self.ms)
         self._reset_memory(self.vs)
@@ -151,7 +158,7 @@ class AudioTaggingScoreCalculator(object):
         Then, the scores are calculated between output and target.
         """
         (precision, recall, f1) = calculate_precision_recall_f1(
-            self.output_dict['target'], self.output_dict['clipwise_output'], 
+            self.output_dict['target'], self.output_dict['clipwise_output'],
             thresholds=params)
 
         return f1
@@ -165,7 +172,7 @@ class SoundEventDetectionScoreCalculator(object):
         self.reference_csv_path = reference_csv_path
         self.submission_path = submission_path
         self.classes_num = classes_num
-        self.frames_per_second= frames_per_second
+        self.frames_per_second = frames_per_second
 
     def params_dict_to_params_list(self, sed_params_dict):
         params = sed_params_dict['audio_tagging_threshold'] + \
@@ -176,14 +183,13 @@ class SoundEventDetectionScoreCalculator(object):
 
     def params_list_to_params_dict(self, params):
         sed_params_dict = {
-            'audio_tagging_threshold': params[0 : self.classes_num], 
-            'sed_high_threshold': params[self.classes_num : 2 * self.classes_num],
-            'sed_low_threshold': params[2 * self.classes_num :],
+            'audio_tagging_threshold': params[0: self.classes_num],
+            'sed_high_threshold': params[self.classes_num: 2 * self.classes_num],
+            'sed_low_threshold': params[2 * self.classes_num:],
             'n_smooth': 10,
             'n_salt': 10
         }
         return sed_params_dict
-
 
     def __call__(self, params):
         """Use hyper parameters to threshold prediction to obtain output.
@@ -200,8 +206,9 @@ class SoundEventDetectionScoreCalculator(object):
         write_submission(predict_event_list, self.submission_path)
 
         # SED with official tool
-        results = official_evaluate(self.reference_csv_path, self.submission_path)
-        
+        results = official_evaluate(
+            self.reference_csv_path, self.submission_path)
+
         f1 = results['overall']['f_measure']['f_measure']
 
         return f1
@@ -221,7 +228,7 @@ def optimize_at_thresholds(args):
       batch_size: int
       iteration: int
     """
-    
+
     # Arugments & parameters
     dataset_dir = args.dataset_dir
     workspace = args.workspace
@@ -233,38 +240,48 @@ def optimize_at_thresholds(args):
     batch_size = args.batch_size
     iteration = args.iteration
     data_type = 'test'
-    
+
     classes_num = config.classes_num
-    
+
     # Paths
     if data_type == 'test':
-        reference_csv_path = os.path.join(dataset_dir, 'metadata', 
-            'groundtruth_strong_label_testing_set.csv')
-    
-    prediction_path = os.path.join(workspace, 'predictions', 
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold), 
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type), 
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
-        '{}_iterations.prediction.{}.pkl'.format(iteration, data_type))
-    
-    tmp_submission_path = os.path.join(workspace, '_tmp_submission', 
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold), 
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type), 
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
-        '_submission.csv')
+        reference_csv_path = os.path.join(dataset_dir, 'metadata',
+                                          'groundtruth_strong_label_testing_set.csv')
 
-    opt_thresholds_path = os.path.join(workspace, 'opt_thresholds', 
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold), 
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type), 
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size),
-        '{}_iterations.at.{}.pkl'.format(iteration, data_type))
+    prediction_path = os.path.join(workspace, 'predictions',
+                                   '{}'.format(filename), 'holdout_fold={}'.format(
+                                       holdout_fold),
+                                   'model_type={}'.format(
+                                       model_type), 'loss_type={}'.format(loss_type),
+                                   'augmentation={}'.format(
+                                       augmentation), 'batch_size={}'.format(batch_size),
+                                   '{}_iterations.prediction.{}.pkl'.format(iteration, data_type))
+
+    tmp_submission_path = os.path.join(workspace, '_tmp_submission',
+                                       '{}'.format(filename), 'holdout_fold={}'.format(
+                                           holdout_fold),
+                                       'model_type={}'.format(
+                                           model_type), 'loss_type={}'.format(loss_type),
+                                       'augmentation={}'.format(
+                                           augmentation), 'batch_size={}'.format(batch_size),
+                                       '_submission.csv')
+
+    opt_thresholds_path = os.path.join(workspace, 'opt_thresholds',
+                                       '{}'.format(filename), 'holdout_fold={}'.format(
+                                           holdout_fold),
+                                       'model_type={}'.format(
+                                           model_type), 'loss_type={}'.format(loss_type),
+                                       'augmentation={}'.format(
+                                           augmentation), 'batch_size={}'.format(batch_size),
+                                       '{}_iterations.at.{}.pkl'.format(iteration, data_type))
     create_folder(os.path.dirname(opt_thresholds_path))
 
     # Score calculator
     score_calculator = AudioTaggingScoreCalculator(prediction_path)
 
     # Thresholds optimizer
-    hyper_params_opt = HyperParamsOptimizer(score_calculator, learning_rate=1e-2, epochs=100)
+    hyper_params_opt = HyperParamsOptimizer(
+        score_calculator, learning_rate=1e-2, epochs=100)
 
     # Initialize thresholds
     init_params = [0.3] * classes_num
@@ -301,7 +318,7 @@ def optimize_sed_thresholds(args):
       batch_size: int
       iteration: int
     """
-    
+
     # Arugments & parameters
     use_cbam = args.use_cbam
     experiment_name = args.experiment_name
@@ -319,12 +336,12 @@ def optimize_sed_thresholds(args):
     audio_16k = args.audio_16k
     device = 'cuda' if (args.cuda and torch.cuda.is_available()) else 'cpu'
     save_dict = {}
-    
+    parser_optimize_sed_thresholds = args.parser_optimize_sed_thresholds
     classes_num = config.classes_num
-    
+
     num_workers = 8
     data_type = 'eval'
-    
+
     # Paths
 #    if feature_type == 'logmel' and not audio_8k and not audio_16k:
 #        strong_valid_hdf5_path = os.path.join(workspace, 'hdf5s', 'strong_validation.h5')
@@ -334,12 +351,12 @@ def optimize_sed_thresholds(args):
 #        strong_valid_hdf5_path = os.path.join(workspace, 'hdf5s', 'strong_validation_16k.h5')
 #    elif feature_type == 'gamma':
 #        strong_valid_hdf5_path = os.path.join(workspace, 'hdf5s', 'strong_validation_{}.h5'.format(feature_type))
-    
+
     if fsd50k:
         pre_dir = 'fsd50k'
     else:
         pre_dir = ''
-        
+
     if audio_8k:
         quality = '8k'
         sample_rate = 8000
@@ -364,43 +381,57 @@ def optimize_sed_thresholds(args):
         mel_bins = 64
         fmin = 50
         fmax = 14000
-    
+
     audio_samples = config.audio_samples
     frames_per_second = config.sample_rate
-    
-    strong_valid_hdf5_path = os.path.join(workspace, 'hdf5s', '{}_{}_{}_st.h5'.format(data_type, feature_type, quality))
-    
+
+    strong_valid_hdf5_path = os.path.join(
+        workspace, 'hdf5s', '{}_{}_{}_st.h5'.format(data_type, feature_type, quality))
+
     valid_reference_csv_path = os.path.join(dataset_dir, 'metadata',
-           f'groundtruth_strong_label_{data_type}_set.csv')
-    
+                                            f'groundtruth_strong_label_{data_type}_set.csv')
+
     submission_name = '_submission_{}.csv'.format(quality)
     checkpoint_name = 'best_{}_{}.pth'.format(feature_type, quality)
-    predict_name = 'best_{}_{}.prediction.{}.pkl'.format(feature_type, quality, data_type)
-    
+    predict_name = 'best_{}_{}.prediction.{}.pkl'.format(
+        feature_type, quality, data_type)
+
     checkpoint_path = os.path.join(workspace, 'checkpoints', pre_dir,
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
-        checkpoint_name)
+                                   '{}'.format(filename), 'holdout_fold={}'.format(
+                                       holdout_fold),
+                                   'model_type={}'.format(
+                                       model_type), 'loss_type={}'.format(loss_type),
+                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(
+                                       batch_size), f"use_cbam={use_cbam}", experiment_name,
+                                   checkpoint_name)
 
     predictions_dir = os.path.join(workspace, 'predictions', pre_dir,
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name)
+                                   '{}'.format(filename), 'holdout_fold={}'.format(
+                                       holdout_fold),
+                                   'model_type={}'.format(
+                                       model_type), 'loss_type={}'.format(loss_type),
+                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name)
     create_folder(predictions_dir)
 
     tmp_submission_path = os.path.join(workspace, '_tmp_submission', pre_dir,
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
-        submission_name)
+                                       '{}'.format(filename), 'holdout_fold={}'.format(
+                                           holdout_fold),
+                                       'model_type={}'.format(
+                                           model_type), 'loss_type={}'.format(loss_type),
+                                       'augmentation={}'.format(augmentation), 'batch_size={}'.format(
+                                           batch_size), f"use_cbam={use_cbam}", experiment_name,
+                                       submission_name)
     create_folder(os.path.dirname(tmp_submission_path))
 
     # Load model
     assert model_type, 'Please specify model_type!'
     Model = eval(model_type)
-    model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
-        classes_num, feature_type, use_cbam)
+    if "PANN" in model_type:
+        model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
+                      classes_num, feature_type, pann_cnn10_encoder_ckpt_path, use_cbam)
+    else:
+        model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
+                      classes_num, feature_type, use_cbam)
 
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model'])
@@ -417,18 +448,19 @@ def optimize_sed_thresholds(args):
     dataset = AudiosetDataset()
 
     # Sampler
-    valid_sampler = TestSampler(hdf5_path=strong_valid_hdf5_path, batch_size=batch_size)
+    valid_sampler = TestSampler(
+        hdf5_path=strong_valid_hdf5_path, batch_size=batch_size)
 
     # Data loader
     valid_loader = torch.utils.data.DataLoader(dataset=dataset,
-        batch_sampler=valid_sampler, collate_fn=collate_fn,
-        num_workers=num_workers, pin_memory=True)
+                                               batch_sampler=valid_sampler, collate_fn=collate_fn,
+                                               num_workers=num_workers, pin_memory=True)
 
     # Evaluator
     evaluator = Evaluator(model=model)
 
     for (data_type, data_loader, reference_csv_path) in [
-        ('eval', valid_loader, valid_reference_csv_path)]:
+            ('eval', valid_loader, valid_reference_csv_path)]:
 
         print('Inferencing {} data in about 1 min ...'.format(data_type))
 
@@ -436,63 +468,75 @@ def optimize_sed_thresholds(args):
             data_loader, reference_csv_path, tmp_submission_path, frames_per_second)
 
         prediction_path = os.path.join(predictions_dir,
-            predict_name)
+                                       predict_name)
 
         # write_out_prediction(output_dict, prediction_path)
         pickle.dump(output_dict, open(prediction_path, 'wb'))
         print('Write out to {}'.format(prediction_path))
 
-    
     # Paths
     valid_reference_csv_path = os.path.join(dataset_dir, 'metadata',
-           f'groundtruth_strong_label_{data_type}_set.csv')
-    
+                                            f'groundtruth_strong_label_{data_type}_set.csv')
+
     prediction_path = os.path.join(workspace, 'predictions', pre_dir,
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold), 
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type), 
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
-        predict_name)
-    
+                                   '{}'.format(filename), 'holdout_fold={}'.format(
+                                       holdout_fold),
+                                   'model_type={}'.format(
+                                       model_type), 'loss_type={}'.format(loss_type),
+                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(
+                                       batch_size), f"use_cbam={use_cbam}", experiment_name,
+                                   predict_name)
+
     tmp_submission_path = os.path.join(workspace, '_tmp_submission', pre_dir,
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold), 
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type), 
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
-        submission_name)
+                                       '{}'.format(filename), 'holdout_fold={}'.format(
+                                           holdout_fold),
+                                       'model_type={}'.format(
+                                           model_type), 'loss_type={}'.format(loss_type),
+                                       'augmentation={}'.format(augmentation), 'batch_size={}'.format(
+                                           batch_size), f"use_cbam={use_cbam}", experiment_name,
+                                       submission_name)
 
     opt_thresholds_path = os.path.join(workspace, 'opt_thresholds', pre_dir,
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold), 
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type), 
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
-        'best_{}_{}.sed.{}.pkl'.format(feature_type, quality, data_type))
+                                       '{}'.format(filename), 'holdout_fold={}'.format(
+                                           holdout_fold),
+                                       'model_type={}'.format(
+                                           model_type), 'loss_type={}'.format(loss_type),
+                                       'augmentation={}'.format(augmentation), 'batch_size={}'.format(
+                                           batch_size), f"use_cbam={use_cbam}", experiment_name,
+                                       'best_{}_{}.sed.{}.pkl'.format(feature_type, quality, data_type))
     create_folder(os.path.dirname(opt_thresholds_path))
-    
+
     save_record_path = os.path.join(workspace, 'opt_thresholds', pre_dir,
-        '{}'.format(filename), 'holdout_fold={}'.format(holdout_fold),
-        'model_type={}'.format(model_type), 'loss_type={}'.format(loss_type),
-        'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
-        'record_{}_{}.sed.{}.pkl'.format(feature_type, quality, data_type))
+                                    '{}'.format(filename), 'holdout_fold={}'.format(
+                                        holdout_fold),
+                                    'model_type={}'.format(
+                                        model_type), 'loss_type={}'.format(loss_type),
+                                    'augmentation={}'.format(augmentation), 'batch_size={}'.format(
+                                        batch_size), f"use_cbam={use_cbam}", experiment_name,
+                                    'record_{}_{}.sed.{}.pkl'.format(feature_type, quality, data_type))
     create_folder(os.path.dirname(save_record_path))
 
     # Score calculator
     score_calculator = SoundEventDetectionScoreCalculator(
-        prediction_path=prediction_path, reference_csv_path=reference_csv_path, 
+        prediction_path=prediction_path, reference_csv_path=reference_csv_path,
         submission_path=tmp_submission_path, classes_num=classes_num, frames_per_second=frames_per_second)
 
     # Thresholds optimizer
     hyper_params_opt = HyperParamsOptimizer(score_calculator, save_dict,
-        learning_rate=1e-2, epochs=10, step=0.02, max_search=5)
+                                            learning_rate=1e-2, epochs=10, step=0.02, max_search=5)
 
     # Initialize thresholds
     sed_params_dict = {
-        'audio_tagging_threshold': [0.5] * classes_num, 
-        'sed_high_threshold': [0.3] * classes_num, 
+        'audio_tagging_threshold': [0.5] * classes_num,
+        'sed_high_threshold': [0.3] * classes_num,
         'sed_low_threshold': [0.1] * classes_num}
 
     init_params = score_calculator.params_dict_to_params_list(sed_params_dict)
     score_no_opt = score_calculator(init_params)
 
     # Optimize thresholds
-    (opt_score, opt_params, save_dict) = hyper_params_opt.do_optimize(init_params=init_params)
+    (opt_score, opt_params, save_dict) = hyper_params_opt.do_optimize(
+        init_params=init_params)
     opt_params = score_calculator.params_list_to_params_dict(opt_params)
 
     print('\n------ Optimized thresholds ------')
@@ -507,7 +551,7 @@ def optimize_sed_thresholds(args):
     # Write out optimized thresholds
     pickle.dump(opt_params, open(opt_thresholds_path, 'wb'))
     print('\nSave optimized thresholds to {}'.format(opt_thresholds_path))
-    
+
     pickle.dump(save_dict, open(save_record_path, 'wb'))
     print('\nSave records to {}'.format(save_record_path))
 
@@ -516,34 +560,61 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Example of parser. ')
     subparsers = parser.add_subparsers(dest='mode')
 
-    parser_optimize_at_thresholds = subparsers.add_parser('optimize_at_thresholds')
-    parser_optimize_at_thresholds.add_argument('--dataset_dir', type=str, required=True)
-    parser_optimize_at_thresholds.add_argument('--workspace', type=str, required=True)
-    parser_optimize_at_thresholds.add_argument('--filename', type=str, required=True)
-    parser_optimize_at_thresholds.add_argument('--holdout_fold', type=str, choices=['1', 'none'], required=True)
-    parser_optimize_at_thresholds.add_argument('--model_type', type=str, required=True)
-    parser_optimize_at_thresholds.add_argument('--loss_type', type=str, required=True)
-    parser_optimize_at_thresholds.add_argument('--augmentation', type=str, choices=['none', 'mixup', 'timeshift_mixup'], required=True)
-    parser_optimize_at_thresholds.add_argument('--batch_size', type=int, required=True)
-    parser_optimize_at_thresholds.add_argument('--iteration', type=int, required=True)
+    parser_optimize_at_thresholds = subparsers.add_parser(
+        'optimize_at_thresholds')
+    parser_optimize_at_thresholds.add_argument(
+        '--dataset_dir', type=str, required=True)
+    parser_optimize_at_thresholds.add_argument(
+        '--workspace', type=str, required=True)
+    parser_optimize_at_thresholds.add_argument(
+        '--filename', type=str, required=True)
+    parser_optimize_at_thresholds.add_argument(
+        '--holdout_fold', type=str, choices=['1', 'none'], required=True)
+    parser_optimize_at_thresholds.add_argument(
+        '--model_type', type=str, required=True)
+    parser_optimize_at_thresholds.add_argument(
+        '--loss_type', type=str, required=True)
+    parser_optimize_at_thresholds.add_argument(
+        '--augmentation', type=str, choices=['none', 'mixup', 'timeshift_mixup'], required=True)
+    parser_optimize_at_thresholds.add_argument(
+        '--batch_size', type=int, required=True)
+    parser_optimize_at_thresholds.add_argument(
+        '--iteration', type=int, required=True)
 
-    parser_optimize_sed_thresholds = subparsers.add_parser('optimize_sed_thresholds')
-    parser_optimize_sed_thresholds.add_argument('-en', '--experiment_name', type=str, required=True)
+    parser_optimize_sed_thresholds = subparsers.add_parser(
+        'optimize_sed_thresholds')
+    parser_optimize_sed_thresholds.add_argument('-cp10', '--pann_cnn10_encoder_ckpt_path',
+                        type=str, default=pann_cnn10_encoder_ckpt_path)
+    parser_optimize_sed_thresholds.add_argument(
+        '-en', '--experiment_name', type=str, required=True)
     parser_optimize_sed_thresholds.add_argument(
         '-cbam', '--use_cbam', action='store_true', default=False)
-    parser_optimize_sed_thresholds.add_argument('--dataset_dir', type=str, required=True)
-    parser_optimize_sed_thresholds.add_argument('--workspace', type=str, required=True)
-    parser_optimize_sed_thresholds.add_argument('--filename', type=str, required=True)
-    parser_optimize_sed_thresholds.add_argument('--holdout_fold', type=str, choices=['1', 'none'], required=True)
-    parser_optimize_sed_thresholds.add_argument('--model_type', type=str, required=True)
-    parser_optimize_sed_thresholds.add_argument('--loss_type', type=str, required=True)
-    parser_optimize_sed_thresholds.add_argument('--augmentation', type=str, choices=['none', 'spec_augment', 'timeshift', 'mixup', 'timeshift_mixup', 'specaugment_timeshift_mixup', 'specaugment_mixup', 'specaugment_timeshift'], required=True)
-    parser_optimize_sed_thresholds.add_argument('--batch_size', type=int, required=True)
-    parser_optimize_sed_thresholds.add_argument('--feature_type', type=str, required=True)
-    parser_optimize_sed_thresholds.add_argument('--fsd50k', action='store_true', default=False)
-    parser_optimize_sed_thresholds.add_argument('--audio_8k', action='store_true', default=False)
-    parser_optimize_sed_thresholds.add_argument('--audio_16k', action='store_true', default=False)
-    parser_optimize_sed_thresholds.add_argument('--cuda', action='store_true', default=False)
+    parser_optimize_sed_thresholds.add_argument(
+        '--dataset_dir', type=str, required=True)
+    parser_optimize_sed_thresholds.add_argument(
+        '--workspace', type=str, required=True)
+    parser_optimize_sed_thresholds.add_argument(
+        '--filename', type=str, required=True)
+    parser_optimize_sed_thresholds.add_argument(
+        '--holdout_fold', type=str, choices=['1', 'none'], required=True)
+    parser_optimize_sed_thresholds.add_argument(
+        '--model_type', type=str, required=True)
+    parser_optimize_sed_thresholds.add_argument(
+        '--loss_type', type=str, required=True)
+    parser_optimize_sed_thresholds.add_argument('--augmentation', type=str, choices=[
+                                                'none', 'spec_augment', 'timeshift', 'mixup', 'timeshift_mixup', 'specaugment_timeshift_mixup', 'specaugment_mixup', 'specaugment_timeshift'], required=True)
+    parser_optimize_sed_thresholds.add_argument(
+        '--batch_size', type=int, required=True)
+    parser_optimize_sed_thresholds.add_argument(
+        '--feature_type', type=str, required=True)
+    parser_optimize_sed_thresholds.add_argument(
+        '--fsd50k', action='store_true', default=False)
+    parser_optimize_sed_thresholds.add_argument(
+        '--audio_8k', action='store_true', default=False)
+    parser_optimize_sed_thresholds.add_argument(
+        '--audio_16k', action='store_true', default=False)
+    parser_optimize_sed_thresholds.add_argument(
+        '--cuda', action='store_true', default=False)
 
     args = parser.parse_args()
 
