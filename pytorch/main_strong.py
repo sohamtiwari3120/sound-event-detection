@@ -207,7 +207,7 @@ def train(wandb, args):
             workspace, 'checkpoints', 'vggish', 'pytorch_vggish.pth')
         model = Model(sample_rate, window_size, hop_size, mel_bins,
                       fmin, fmax, classes_num, feature_type, vggish_path)
-    elif "pann" in model_type:
+    elif "PANN" in model_type:
         model = Model(sample_rate, window_size, hop_size, mel_bins,
                       fmin, fmax, classes_num, feature_type, pann_cnn10_encoder_ckpt_path, use_cbam)
     else:
