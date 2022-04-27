@@ -40,6 +40,7 @@ def cycle_iteration(iterable):
 
 
 def train(wandb, args):
+    wandb.init(project="st-project-sed", entity="sohamtiwari3120")
     """Train and evaluate.
 
     Args:
@@ -1503,7 +1504,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.filename = get_filename(__file__)
 
-    wandb.init(project="st-project-sed", entity="sohamtiwari3120")
 
     if args.mode == 'train':
         train(wandb, args)
