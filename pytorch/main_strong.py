@@ -632,6 +632,8 @@ def inference_prob_overlap(self):
     """
 
     # Arugments & parameters
+    pann_cnn10_encoder_ckpt_path = args.pann_cnn10_encoder_ckpt_path
+    experiment_name = args.experiment_name
     dataset_dir = args.dataset_dir
     workspace = args.workspace
     holdout_fold = args.holdout_fold
@@ -697,7 +699,7 @@ def inference_prob_overlap(self):
                                    'model_type={}'.format(
                                        model_type), 'loss_type={}'.format(loss_type),
                                    'augmentation={}'.format(
-                                       augmentation), 'batch_size={}'.format(batch_size),
+                                       augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
                                    checkpoint_name)
 
     predictions_dir = os.path.join(workspace, 'predictions', pre_dir,
@@ -705,7 +707,7 @@ def inference_prob_overlap(self):
                                        holdout_fold),
                                    'model_type={}'.format(
                                        model_type), 'loss_type={}'.format(loss_type),
-                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size))
+                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name)
 
     tmp_submission_path = os.path.join(workspace, '_tmp_submission', pre_dir,
                                        '{}'.format(filename), 'holdout_fold={}'.format(
@@ -713,7 +715,7 @@ def inference_prob_overlap(self):
                                        'model_type={}'.format(
                                            model_type), 'loss_type={}'.format(loss_type),
                                        'augmentation={}'.format(
-                                           augmentation), 'batch_size={}'.format(batch_size),
+                                           augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
                                        tmp_submission_name)
 
     reference_csv_path = os.path.join(
@@ -725,7 +727,11 @@ def inference_prob_overlap(self):
     # Load model
     assert model_type, 'Please specify model_type!'
     Model = eval(model_type)
-    model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
+    if "PANN" in model_type:
+        model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
+                  classes_num, feature_type, pann_cnn10_encoder_ckpt_path, use_cbam)
+    else:
+        model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
                   classes_num, feature_type, use_cbam)
 
     checkpoint = torch.load(checkpoint_path)
@@ -747,7 +753,7 @@ def inference_prob_overlap(self):
                                            'model_type={}'.format(
                                                model_type), 'loss_type={}'.format(loss_type),
                                            'augmentation={}'.format(
-                                               augmentation), 'batch_size={}'.format(batch_size),
+                                               augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
                                            'best_{}_{}.sed.{}.pkl'.format(feature_type, quality, data_type))
         sed_params_dict = pickle.load(open(sed_thresholds_path, 'rb'))
     else:
@@ -1422,6 +1428,11 @@ if __name__ == '__main__':
     # Inference (overlap + avg)
     parser_inference_prob_overlap = subparsers.add_parser(
         'inference_prob_overlap')
+    parser_inference_prob_overlap.add_argument('-en', '--experiment_name', type=str, required=True)
+    parser_inference_prob_overlap.add_argument('-cp10', '--pann_cnn10_encoder_ckpt_path',
+                        type=str, default=pann_cnn10_encoder_ckpt_path)
+    parser_inference_prob_overlap.add_argument('-cbam', '--use_cbam',
+                              action='store_true', default=False)
     parser_inference_prob_overlap.add_argument(
         '--dataset_dir', type=str, required=True, help='Directory of dataset.')
     parser_inference_prob_overlap.add_argument(
@@ -1454,8 +1465,6 @@ if __name__ == '__main__':
         '--fsd50k', action='store_true', default=False)
     parser_inference_prob_overlap.add_argument(
         '-ms', '--model_summary', action='store_true', default=False)
-    parser_inference_prob_overlap.add_argument(
-        '-cbam', '--use_cbam', action='store_true', default=False)
 
     # Inference (overlap + vote)
     parser_inference_prob_vote = subparsers.add_parser('inference_prob_vote')
