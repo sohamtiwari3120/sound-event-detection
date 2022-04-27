@@ -1,3 +1,6 @@
+import os
+import sys
+sys.path.insert(1, os.path.join(sys.path[0], '../pytorch'))
 from utilities import (get_filename, create_folder,
                        frame_prediction_to_event_prediction, write_submission, official_evaluate)
 import config
@@ -23,9 +26,7 @@ import math
 import h5py
 import argparse
 import numpy as np
-import os
-import sys
-sys.path.insert(1, os.path.join(sys.path[0], '../pytorch'))
+
 #from autoth.core import HyperParamsOptimizer
 
 
