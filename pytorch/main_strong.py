@@ -10,7 +10,7 @@ from utilities import (create_folder, frame_prediction_to_event_prediction_v2, f
 from pytorch_utils import move_data_to_device, do_mixup, do_mixup_timeshift
 from losses import get_loss_func
 from config import (sample_rate, classes_num, mel_bins, fmin, fmax,
-                    window_size, hop_size, window, pad_mode, center, device, ref, amin, top_db, time_steps, mel_bins, pann_cnn10_encoder_ckpt_path)
+                    window_size, hop_size, window, pad_mode, center, device, ref, amin, top_db, time_steps, mel_bins, pann_cnn10_encoder_ckpt_path, pann_cnn14_encoder_ckpt_path)
 from evaluate import Evaluator
 import config
 from torchsummary import summary
@@ -62,6 +62,7 @@ def train(wandb, args):
     # Arugments & parameters
     experiment_name = args.experiment_name
     pann_cnn10_encoder_ckpt_path = args.pann_cnn10_encoder_ckpt_path
+    pann_cnn14_encoder_ckpt_path = args.pann_cnn14_encoder_ckpt_path
     dataset_dir = args.dataset_dir
     workspace = args.workspace
     holdout_fold = args.holdout_fold
@@ -210,7 +211,7 @@ def train(wandb, args):
                       fmin, fmax, classes_num, feature_type, vggish_path)
     elif "PANN" in model_type:
         model = Model(sample_rate, window_size, hop_size, mel_bins,
-                      fmin, fmax, classes_num, feature_type, pann_cnn10_encoder_ckpt_path, use_pna = use_pna)
+                      fmin, fmax, classes_num, feature_type, pann_cnn14_encoder_ckpt_path=pann_cnn14_encoder_ckpt_path, use_pna = use_pna)
     else:
         model = Model(sample_rate, window_size, hop_size, mel_bins,
                       fmin, fmax, classes_num, feature_type, use_pna)
@@ -1370,6 +1371,8 @@ if __name__ == '__main__':
     parser_train.add_argument('-en', '--experiment_name', type=str, required=True)
     parser_train.add_argument('-cp10', '--pann_cnn10_encoder_ckpt_path',
                         type=str, default=pann_cnn10_encoder_ckpt_path)
+    parser_train.add_argument('-cp14', '--pann_cnn14_encoder_ckpt_path',
+                        type=str, default=pann_cnn14_encoder_ckpt_path)
     parser_train.add_argument(
         '--dataset_dir', type=str, required=True, help='Directory of dataset.')
     parser_train.add_argument(
