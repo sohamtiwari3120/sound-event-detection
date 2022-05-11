@@ -81,7 +81,7 @@ def train(wandb, args):
     vggish = args.vggish
     fsd50k = args.fsd50k
     model_summary = args.model_summary
-    use_cbam = args.use_cbam
+    use_pna = args.use_pna
     timeshift = False
     spec_augment = False
 
@@ -160,7 +160,7 @@ def train(wandb, args):
                                        holdout_fold),
                                    'model_type={}'.format(
                                        model_type), 'loss_type={}'.format(loss_type),
-                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name)
+                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_pna={use_pna}", experiment_name)
 
     tmp_submission_path = os.path.join(workspace, '_tmp_submission', file_header,
                                        '{}{}'.format(prefix, filename), 'holdout_fold={}'.format(
@@ -168,7 +168,7 @@ def train(wandb, args):
                                        'model_type={}'.format(
                                            model_type), 'loss_type={}'.format(loss_type),
                                        'augmentation={}'.format(augmentation), 'batch_size={}'.format(
-                                           batch_size), f"use_cbam={use_cbam}", experiment_name,
+                                           batch_size), f"use_pna={use_pna}", experiment_name,
                                        submission_name)
 
     statistics_path = os.path.join(workspace, 'statistics', file_header,
@@ -177,7 +177,7 @@ def train(wandb, args):
                                    'model_type={}'.format(
                                        model_type), 'loss_type={}'.format(loss_type),
                                    'augmentation={}'.format(augmentation), 'batch_size={}'.format(
-                                       batch_size), f"use_cbam={use_cbam}", experiment_name,
+                                       batch_size), f"use_pna={use_pna}", experiment_name,
                                    statistics_name)
 
     logs_dir = os.path.join(workspace, 'logs', file_header, '{}{}'.format(prefix, filename),
@@ -185,7 +185,7 @@ def train(wandb, args):
                                 holdout_fold), 'model_type={}'.format(model_type),
                             'loss_type={}'.format(
                                 loss_type), 'augmentation={}'.format(augmentation),
-                            'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name)
+                            'batch_size={}'.format(batch_size), f"use_pna={use_pna}", experiment_name)
 
     create_folder(checkpoints_dir)
     create_folder(os.path.dirname(tmp_submission_path))
@@ -210,10 +210,10 @@ def train(wandb, args):
                       fmin, fmax, classes_num, feature_type, vggish_path)
     elif "PANN" in model_type:
         model = Model(sample_rate, window_size, hop_size, mel_bins,
-                      fmin, fmax, classes_num, feature_type, pann_cnn10_encoder_ckpt_path, use_cbam)
+                      fmin, fmax, classes_num, feature_type, pann_cnn10_encoder_ckpt_path, use_pna = use_pna)
     else:
         model = Model(sample_rate, window_size, hop_size, mel_bins,
-                      fmin, fmax, classes_num, feature_type, use_cbam)
+                      fmin, fmax, classes_num, feature_type, use_pna)
     wandb.watch(model, log_freq=100)
     statistics_container = StatisticsContainer(statistics_path)
     if model_summary:
@@ -651,7 +651,7 @@ def inference_prob_overlap(self):
     audio_16k = args.audio_16k
     data_type = args.data_type
     fsd50k = args.fsd50k
-    use_cbam = args.use_cbam
+    use_pna = args.use_pna
     # data_type = 'testing'
 
     num_workers = 8
@@ -700,7 +700,7 @@ def inference_prob_overlap(self):
                                    'model_type={}'.format(
                                        model_type), 'loss_type={}'.format(loss_type),
                                    'augmentation={}'.format(
-                                       augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
+                                       augmentation), 'batch_size={}'.format(batch_size), f"use_pna={use_pna}", experiment_name,
                                    checkpoint_name)
 
     predictions_dir = os.path.join(workspace, 'predictions', pre_dir,
@@ -708,7 +708,7 @@ def inference_prob_overlap(self):
                                        holdout_fold),
                                    'model_type={}'.format(
                                        model_type), 'loss_type={}'.format(loss_type),
-                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name)
+                                   'augmentation={}'.format(augmentation), 'batch_size={}'.format(batch_size), f"use_pna={use_pna}", experiment_name)
 
     tmp_submission_path = os.path.join(workspace, '_tmp_submission', pre_dir,
                                        '{}'.format(filename), 'holdout_fold={}'.format(
@@ -716,7 +716,7 @@ def inference_prob_overlap(self):
                                        'model_type={}'.format(
                                            model_type), 'loss_type={}'.format(loss_type),
                                        'augmentation={}'.format(
-                                           augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
+                                           augmentation), 'batch_size={}'.format(batch_size), f"use_pna={use_pna}", experiment_name,
                                        tmp_submission_name)
 
     reference_csv_path = os.path.join(
@@ -730,10 +730,10 @@ def inference_prob_overlap(self):
     Model = eval(model_type)
     if "PANN" in model_type:
         model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
-                  classes_num, feature_type, pann_cnn10_encoder_ckpt_path, use_cbam)
+                  classes_num, feature_type, pann_cnn10_encoder_ckpt_path, use_pna = use_pna)
     else:
         model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
-                  classes_num, feature_type, use_cbam)
+                  classes_num, feature_type, use_pna)
 
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model'])
@@ -754,7 +754,7 @@ def inference_prob_overlap(self):
                                            'model_type={}'.format(
                                                model_type), 'loss_type={}'.format(loss_type),
                                            'augmentation={}'.format(
-                                               augmentation), 'batch_size={}'.format(batch_size), f"use_cbam={use_cbam}", experiment_name,
+                                               augmentation), 'batch_size={}'.format(batch_size), f"use_pna={use_pna}", experiment_name,
                                            'best_{}_{}.sed.{}.pkl'.format(feature_type, quality, data_type))
         sed_params_dict = pickle.load(open(sed_thresholds_path, 'rb'))
     else:
@@ -1397,6 +1397,8 @@ if __name__ == '__main__':
                               action='store_true', default=False)
     parser_train.add_argument('-cbam', '--use_cbam',
                               action='store_true', default=False)
+    parser_train.add_argument('-pna', '--use_pna',
+                              action='store_true', default=False)
 
     # Inference
     parser_inference_prob = subparsers.add_parser('inference_prob')
@@ -1432,7 +1434,7 @@ if __name__ == '__main__':
     parser_inference_prob_overlap.add_argument('-en', '--experiment_name', type=str, required=True)
     parser_inference_prob_overlap.add_argument('-cp10', '--pann_cnn10_encoder_ckpt_path',
                         type=str, default=pann_cnn10_encoder_ckpt_path)
-    parser_inference_prob_overlap.add_argument('-cbam', '--use_cbam',
+    parser_inference_prob_overlap.add_argument('-cbam', '--use_pna',
                               action='store_true', default=False)
     parser_inference_prob_overlap.add_argument(
         '--dataset_dir', type=str, required=True, help='Directory of dataset.')

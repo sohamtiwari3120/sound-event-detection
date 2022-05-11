@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
-from pann_encoder import Cnn10
-
+from pann_encoder import Cnn10, Cnn14
+from ParNetAttention import ParNetAttention
 from pytorch_utils import do_mixup, do_mixup_timeshift, do_timeshift
 from augmentation import SpecAugmentation
 from stft import Spectrogram, LogmelFilterBank, STFT, CQTFilterBank, GammaFilterBank
@@ -703,7 +703,7 @@ class Cnn_9layers_Gru_FrameAtt(nn.Module):
 
 class PANN_Gru_FrameAtt(nn.Module):
     def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
-        fmax, classes_num, feature_type, pann_cnn10_encoder_ckpt_path, use_cbam=False):
+        fmax, classes_num, feature_type, pann_cnn10_encoder_ckpt_path='', pann_cnn14_encoder_ckpt_path='', use_cbam=False, use_pna = False):
 
         super(PANN_Gru_FrameAtt, self).__init__()
 
@@ -715,6 +715,7 @@ class PANN_Gru_FrameAtt(nn.Module):
         top_db = None
         self.feature_type = feature_type
         self.use_cbam = use_cbam
+        self.use_pna = use_pna
 
         # Spectrogram extractor
         self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size,
@@ -731,23 +732,28 @@ class PANN_Gru_FrameAtt(nn.Module):
             freq_drop_width=8, freq_stripes_num=2)
 
 
-        self.pann_encoder = Cnn10()
-        if len(pann_cnn10_encoder_ckpt_path) > 0 and os.path.exists(pann_cnn10_encoder_ckpt_path) == False:
+        self.pann_encoder = Cnn14()
+        if len(pann_cnn14_encoder_ckpt_path) > 0 and os.path.exists(pann_cnn14_encoder_ckpt_path) == False:
                 raise Exception(
-                    f"Model checkpoint path '{pann_cnn10_encoder_ckpt_path}' does not exist/not found.")
-        self.pann_cnn10_encoder_ckpt_path = pann_cnn10_encoder_ckpt_path
-        if self.pann_cnn10_encoder_ckpt_path != '':
+                    f"Model checkpoint path '{pann_cnn14_encoder_ckpt_path}' does not exist/not found.")
+        self.pann_cnn14_encoder_ckpt_path = pann_cnn14_encoder_ckpt_path
+        if self.pann_cnn14_encoder_ckpt_path != '':
             self.pann_encoder.load_state_dict(torch.load(
-                self.pann_cnn10_encoder_ckpt_path)['model'], strict=False)
+                self.pann_cnn14_encoder_ckpt_path)['model'], strict=False)
             print(
-                f'loaded pann_cnn10 pretrained encoder state from {self.pann_cnn10_encoder_ckpt_path}')
+                f'loaded pann_cnn14 pretrained encoder state from {self.pann_cnn14_encoder_ckpt_path}')
 
+        self.channels = 2048
         if self.use_cbam:
-            self.cbam = CBAMBlock(512, 2, 3)
-        self.gru = nn.GRU(input_size=512, hidden_size=256, num_layers=1,
+            self.cbam = CBAMBlock(self.channels, 2, 3)
+
+        if self.use_pna:
+            self.pna = ParNetAttention(self.channels)
+
+        self.gru = nn.GRU(input_size=self.channels, hidden_size=256, num_layers=1,
             bias=True, batch_first=True, bidirectional=True)
 
-        self.att_block = AttBlock(n_in=512, n_out=classes_num, activation='sigmoid')
+        self.att_block = AttBlock(n_in=self.channels, n_out=classes_num, activation='sigmoid')
 
         self.init_weights()
 
@@ -780,7 +786,9 @@ class PANN_Gru_FrameAtt(nn.Module):
             x = do_timeshift(x)
 
         x = self.pann_encoder(x)
-        
+        if self.use_pna:
+            x = self.pna(x)
+
         x = torch.mean(x, dim=3)
         x = x.transpose(1, 2)   # (batch_size, time_steps, channels)
         (x, _) = self.gru(x)
